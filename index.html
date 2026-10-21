@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Font Studio: buat font sendiri dari tulisan tangan atau desain digital. Gratis, tepi huruf halus, hasil TTF dan WOFF siap dipakai di Canva, Word, dan Photoshop.">
+<meta name="keywords" content="pembuat font, buat font sendiri, font tulisan tangan, handwriting font, font generator, TTF, WOFF">
+<meta name="theme-color" content="#c2410c">
+<link rel="canonical" href="https://taknampak1706-byte.github.io/font-studio/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="id_ID">
+<meta property="og:url" content="https://taknampak1706-byte.github.io/font-studio/">
+<meta property="og:title" content="Font Studio: Buat Font Sendiri dari Gambar">
+<meta property="og:description" content="Ubah tulisan tangan atau desain digital menjadi file font TTF dan WOFF. Gratis dan berjalan di browser.">
+<meta property="og:image" content="https://taknampak1706-byte.github.io/font-studio/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://taknampak1706-byte.github.io/font-studio/preview.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23c2410c'/%3E%3Ctext x='50' y='72' font-size='64' font-family='Georgia,serif' font-weight='bold' text-anchor='middle' fill='white'%3EAa%3C/text%3E%3C/svg%3E">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Font Studio","applicationCategory":"DesignApplication","operatingSystem":"Any","inLanguage":"id","url":"https://taknampak1706-byte.github.io/font-studio/","description":"Buat font sendiri dari tulisan tangan atau desain digital, hasil TTF dan WOFF.","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR"}}</script>
+<title>Font Studio: Buat Font dari Gambar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#faf7f2;--card:#fff;--tx:#1d1b18;--mut:#6b655c;--ac:#c2410c;--acx:#fff;--bd:#e4ddd2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17150f;--card:#221f18;--tx:#f3eee4;--mut:#a39b8d;--ac:#fb923c;--acx:#1d1b18;--bd:#38332a}}
+:root[data-theme="dark"]{--bg:#17150f;--card:#221f18;--tx:#f3eee4;--mut:#a39b8d;--ac:#fb923c;--acx:#1d1b18;--bd:#38332a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:26px;margin:0 0 4px}
+p.sub{color:var(--mut);margin:0 0 20px}
+section{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+h2{font-size:17px;margin:0 0 10px;display:flex;gap:8px;align-items:center}
+h2 span{background:var(--ac);color:var(--acx);width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+label{display:block;font-size:14px;color:var(--mut);margin:10px 0 4px}
+input[type=text],input[type=number],textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+input[type=range]{width:100%}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+button,.btn{display:block;text-align:center;background:var(--ac);color:var(--acx);border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:600;cursor:pointer;width:100%;margin-top:12px}
+button.alt,.btn.alt{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+button:disabled{opacity:.5}
+input[type=file]{display:none}
+.tabs{display:flex;gap:8px;margin-bottom:6px}.tabs button{margin:0;padding:10px}
+.scroll{overflow-x:auto}
+canvas{max-width:100%;border:1px solid var(--bd);border-radius:8px;margin-top:10px;background:#fff}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px;margin-top:10px}
+.slot{aspect-ratio:1;border:1px dashed var(--bd);border-radius:8px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;background:#fff;color:#999;font-size:20px}
+.slot img{width:100%;height:100%;object-fit:contain}
+.slot b{position:absolute;left:3px;top:1px;font-size:11px;color:#777;background:#fffc;padding:0 3px;border-radius:4px}
+.slot.ok{border-style:solid;border-color:var(--ac)}
+#prev{font-size:44px;min-height:120px;line-height:1.3;word-break:break-all}
+#all{font-size:30px;line-height:1.4;word-break:break-all;border-top:1px solid var(--bd);margin-top:10px;padding-top:10px}
+.msg{font-size:14px;color:var(--mut);margin-top:8px}
+ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Font Studio</h1>
+<p class="sub">Ubah tulisan tangan atau desain digital menjadi file font TTF dengan tepi huruf halus.</p>
+
+<section>
+<h2><span>1</span>Pilih karakter</h2>
+<label for="chars">Karakter yang akan dibuat</label>
+<textarea id="chars" rows="3">ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?-</textarea>
+<div class="row">
+<div><label for="cols">Kolom template</label><input id="cols" type="number" min="3" max="12" value="8"></div>
+<div><button class="alt" id="mkT">Unduh template</button></div>
+</div>
+<canvas id="tc" hidden></canvas>
+</section>
+
+<section>
+<h2><span>2</span>Impor dari galeri</h2>
+<div class="tabs">
+<button id="tabA">Foto lembar kisi</button>
+<button id="tabB" class="alt">Gambar per karakter</button>
+</div>
+<div id="pA">
+<p class="msg">Isi template dengan tulisan tangan, foto, lalu pilih foto dari galeri. Aplikasi memotong tiap kotak otomatis.</p>
+<label class="btn" for="sheet">Pilih foto lembar</label><input id="sheet" type="file" accept="image/*">
+</div>
+<div id="pB" hidden>
+<p class="msg">Pilih banyak gambar sekaligus (PNG, JPG). Beri nama file sesuai karakter, misalnya A.png atau b.png. File lain mengisi kotak kosong secara berurutan. Satu gambar sebaiknya satu karakter, ukuran bingkai sama, dengan huruf berdiri di garis dasar yang sama.</p>
+<label class="btn" for="imgs">Pilih gambar</label><input id="imgs" type="file" accept="image/*" multiple>
+<label for="bl">Garis dasar huruf pada gambar tunggal: <b id="blv">72</b>% dari atas</label>
+<input id="bl" type="range" min="40" max="95" value="72">
+</div>
+<div class="msg">Ketuk kotak di bawah untuk mengganti gambar satu karakter.</div>
+<div class="slots" id="slots"></div>
+<input id="one" type="file" accept="image/*">
+</section>
+
+<section>
+<h2><span>3</span>Atur dan buat font</h2>
+<div class="row">
+<div><label for="fname">Nama font</label><input id="fname" type="text" value="FontSaya"></div>
+<div><label for="fdes">Desainer</label><input id="fdes" type="text" placeholder="Nama Anda"></div>
+</div>
+<label for="flic">Hak cipta dan lisensi</label>
+<input id="flic" type="text" placeholder="Contoh: Hak cipta 2026 Nama Anda. Semua hak dilindungi.">
+<label for="th">Kegelapan tulisan: <b id="thv">0</b></label>
+<input id="th" type="range" min="-40" max="40" value="0">
+<label for="sc">Ukuran huruf: <b id="scv">130</b>%</label>
+<input id="sc" type="range" min="80" max="180" value="130">
+<label for="sb">Jarak antar huruf: <b id="sbv">60</b></label>
+<input id="sb" type="range" min="0" max="160" value="60">
+<button id="build" disabled>Buat font</button>
+<div class="row"><button class="alt" id="savep">Simpan proyek</button><label class="btn alt" for="openp">Buka proyek</label></div>
+<input id="openp" type="file" accept=".json,application/json">
+<div class="msg" id="msg"></div>
+</section>
+
+<section id="res" hidden>
+<h2><span>4</span>Coba dan unduh</h2>
+<textarea id="ptxt" rows="2">Halo Dunia 123</textarea>
+<div id="prev"></div>
+<div id="all"></div>
+<button id="dl">Unduh font (.ttf)</button>
+<button id="dlz" class="alt">Unduh paket jual (.zip)</button>
+<div class="msg" id="msg2">Paket berisi TTF, WOFF untuk web, gambar pratinjau PNG, dan contoh lisensi.</div>
+<div class="msg">Sebelum dijual, uji font di Word, Canva, dan Photoshop. Cek tiap huruf dan jarak antar huruf.</div>
+<ul>
+<li>Marketplace font umumnya meminta huruf besar, huruf kecil, angka, dan tanda baca lengkap.</li>
+<li>Pastikan semua desain karakter murni karya Anda sendiri.</li>
+<li>Font ini belum memiliki kerning dan hinting. Tambahkan di FontForge atau Glyphs bila platform meminta.</li>
+</ul>
+</section>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var CELL=200,M=.03,slots={},fontBuf=null,downloads=null,repCh=null;
+try{claude.use("downloads").then(function(d){downloads=d})}catch(e){}
+
+function list(){return Array.from(new Set(Array.from($("chars").value.replace(/\s/g,"")))).filter(function(c){return c.codePointAt(0)<65536})}
+function cols(){return Math.min(12,Math.max(3,parseInt($("cols").value)||8))}
+function save(name,data){
+ if(!downloads){
+  var bb=data instanceof Blob?data:new Blob([data]),a=document.createElement("a");
+  a.href=URL.createObjectURL(bb);a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},3000);return;
+ }
+ downloads.save({filename:name,data:data}).catch(function(e){if(e&&e.code!=="declined")$("msg").textContent="Gagal menyimpan: "+(e.message||e.code)});
+}
+["th","sc","sb","bl"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
+
+/* tab */
+$("tabA").onclick=function(){$("pA").hidden=false;$("pB").hidden=true;$("tabA").className="";$("tabB").className="alt"};
+$("tabB").onclick=function(){$("pA").hidden=true;$("pB").hidden=false;$("tabB").className="";$("tabA").className="alt"};
+
+/* template */
+$("mkT").onclick=function(){
+ var l=list(),c=cols(),r=Math.ceil(l.length/c),cv=$("tc");cv.width=c*CELL;cv.height=r*CELL;cv.hidden=false;
+ var g=cv.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,cv.width,cv.height);
+ g.strokeStyle="#bbb";g.lineWidth=2;g.fillStyle="#aaa";g.font="16px sans-serif";
+ l.forEach(function(ch,i){
+  var x=(i%c)*CELL,y=Math.floor(i/c)*CELL;
+  g.strokeRect(x+1,y+1,CELL-2,CELL-2);g.fillText(ch,x+8,y+20);
+  g.save();g.setLineDash([6,6]);g.strokeStyle="#ddd";g.beginPath();g.moveTo(x+6,y+CELL*.72);g.lineTo(x+CELL-6,y+CELL*.72);g.stroke();g.restore();
+ });
+ cv.toBlob(function(b){save("template-font.png",b)});
+};
+
+/* impor */
+function loadCanvas(file,lim){return new Promise(function(res,rej){
+ var u=URL.createObjectURL(file),im=new Image();
+ im.onload=function(){var s=Math.min(1,lim/Math.max(im.width,im.height)),c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));
+  var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+  URL.revokeObjectURL(u);res(c)};
+ im.onerror=rej;im.src=u})}
+function thumb(c){var t=document.createElement("canvas"),h=80;t.width=Math.max(1,Math.round(h*c.width/c.height));t.height=h;
+ var g=t.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,t.width,h);g.drawImage(c,0,0,t.width,h);return t.toDataURL("image/png")}
+function setSlot(ch,c,type){slots[ch]={src:c,type:type,url:thumb(c)}}
+function renderSlots(){
+ var box=$("slots");box.innerHTML="";var n=0;
+ list().forEach(function(ch){
+  var d=document.createElement("div"),s=slots[ch];d.className="slot"+(s?" ok":"");
+  if(s){n++;var im=document.createElement("img");im.src=s.url;d.appendChild(im)}else d.textContent="+";
+  var b=document.createElement("b");b.textContent=ch;d.appendChild(b);
+  d.onclick=function(){repCh=ch;$("one").click()};
+  box.appendChild(d);
+ });
+ $("build").disabled=n===0;
+ $("msg").textContent=n+" dari "+list().length+" karakter terisi.";
+}
+$("chars").oninput=renderSlots;
+$("sheet").onchange=function(e){
+ var f=e.target.files[0];if(!f)return;
+ loadCanvas(f,3600).then(function(im){
+  var l=list(),c=cols(),r=Math.ceil(l.length/c),cw=im.width/c,chh=im.height/r;
+  l.forEach(function(ch,i){
+   var sx=(i%c)*cw+cw*M,sy=Math.floor(i/c)*chh+chh*M,sw=cw*(1-2*M),sh=chh*(1-2*M),k=Math.min(1,600/sh);
+   var cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(sw*k));cv.height=Math.max(1,Math.round(sh*k));
+   cv.getContext("2d").drawImage(im,sx,sy,sw,sh,0,0,cv.width,cv.height);
+   setSlot(ch,cv,"sheet");
+  });
+  renderSlots();
+ }).catch(function(){$("msg").textContent="Gambar tidak bisa dibaca."});
+};
+$("imgs").onchange=function(e){
+ var fs=Array.from(e.target.files).sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
+ var l=list(),p=Promise.resolve();
+ fs.forEach(function(f){p=p.then(function(){return loadCanvas(f,900)}).then(function(c){
+  var base=f.name.replace(/\.[^.]+$/,""),t=null;
+  if(Array.from(base).length===1&&l.indexOf(base)>=0)t=base;
+  else for(var i=0;i<l.length;i++)if(!slots[l[i]]){t=l[i];break}
+  if(t)setSlot(t,c,"img");
+ })});
+ p.then(renderSlots);
+};
+$("one").onchange=function(e){
+ var f=e.target.files[0];e.target.value="";if(!f||!repCh)return;
+ loadCanvas(f,900).then(function(c){setSlot(repCh,c,"img");renderSlots()});
+};
+
+/* vektorisasi */
+function otsu(l){
+ var h=new Array(256).fill(0),n=l.length,i,sum=0;
+ for(i=0;i<n;i++)h[l[i]|0]++;
+ for(i=0;i<256;i++)sum+=i*h[i];
+ var sB=0,wB=0,mx=0,t=128;
+ for(i=0;i<256;i++){wB+=h[i];if(!wB)continue;var wF=n-wB;if(!wF)break;sB+=i*h[i];
+  var mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;t=i}}
+ return t+1;
+}
+function trace(F,w,h){
+ var nxt=new Map(),wh=w*h;
+ function hk(x,y){return y*w+x}function vk(x,y){return wh+y*w+x}
+ for(var y=0;y<h-1;y++)for(var x=0;x<w-1;x++){
+  var i=(F[y*w+x]>0?1:0)|(F[y*w+x+1]>0?2:0)|(F[(y+1)*w+x+1]>0?4:0)|(F[(y+1)*w+x]>0?8:0);
+  if(i===0||i===15)continue;
+  var T=hk(x,y),B=hk(x,y+1),L=vk(x,y),R=vk(x+1,y);
+  switch(i){
+   case 1:nxt.set(L,T);break;case 2:nxt.set(T,R);break;case 4:nxt.set(R,B);break;case 8:nxt.set(B,L);break;
+   case 3:nxt.set(L,R);break;case 6:nxt.set(T,B);break;case 12:nxt.set(R,L);break;case 9:nxt.set(B,T);break;
+   case 7:nxt.set(L,B);break;case 11:nxt.set(B,R);break;case 13:nxt.set(R,T);break;case 14:nxt.set(T,L);break;
+   case 5:nxt.set(L,T);nxt.set(R,B);break;case 10:nxt.set(T,R);nxt.set(B,L);break;
+  }
+ }
+ function pos(k){
+  var a,x,y,v0,v1,t;
+  if(k<wh){y=Math.floor(k/w);x=k%w;v0=F[k];v1=F[k+1];t=v0/(v0-v1);return[x+t-.5,y-.5]}
+  a=k-wh;y=Math.floor(a/w);x=a%w;v0=F[a];v1=F[a+w];t=v0/(v0-v1);return[x-.5,y+t-.5];
+ }
+ var seen=new Set(),loops=[];
+ nxt.forEach(function(_,s){
+  if(seen.has(s))return;
+  var cur=s,pts=[],ok=false;
+  while(cur!==undefined&&!seen.has(cur)){seen.add(cur);pts.push(pos(cur));cur=nxt.get(cur)}
+  if(cur===s&&pts.length>3)loops.push(pts);
+ });
+ return loops;
+}
+function area(p){var a=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1]}return a/2}
+function simp(p,eps){
+ var n=p.length;if(n<6)return p;
+ var q=p.concat([p[0]]),keep=new Uint8Array(n+1),f=0,fd=0,i;
+ keep[0]=keep[n]=1;
+ for(i=1;i<n;i++){var dx=p[i][0]-p[0][0],dy=p[i][1]-p[0][1],dd=dx*dx+dy*dy;if(dd>fd){fd=dd;f=i}}
+ keep[f]=1;
+ function rec(a,b){
+  if(b<=a+1)return;
+  var ax=q[a][0],ay=q[a][1],dx=q[b][0]-ax,dy=q[b][1]-ay,L=Math.sqrt(dx*dx+dy*dy)||1,m=-1,mi=-1;
+  for(var j=a+1;j<b;j++){var d=Math.abs((q[j][0]-ax)*dy-(q[j][1]-ay)*dx)/L;if(d>m){m=d;mi=j}}
+  if(m>eps){keep[mi]=1;rec(a,mi);rec(mi,b)}
+ }
+ rec(0,f);rec(f,n);
+ var out=[];for(i=0;i<n;i++)if(keep[i])out.push(q[i]);
+ return out;
+}
+function makeGlyph(s,off,scale,sb,blPct){
+ var H=480,W=Math.min(960,Math.max(60,Math.round(H*s.src.width/s.src.height)));
+ var c=document.createElement("canvas");c.width=W;c.height=H;
+ var g=c.getContext("2d",{willReadFrequently:true});
+ g.fillStyle="#fff";g.fillRect(0,0,W,H);g.imageSmoothingQuality="high";g.drawImage(s.src,0,0,W,H);
+ var px=g.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),mn=255,i;
+ for(i=0;i<W*H;i++){var v=.299*px[i*4]+.587*px[i*4+1]+.114*px[i*4+2];lum[i]=v;if(v<mn)mn=v}
+ if(mn>215)return{adv:350,contours:[]};
+ var t=Math.min(otsu(lum),170)+off,w=W+2,h=H+2,F=new Float32Array(w*h).fill(-60);
+ for(var y=0;y<H;y++)for(var x=0;x<W;x++)F[(y+1)*w+x+1]=t-lum[y*W+x];
+ var loops=trace(F,w,h).filter(function(p){return Math.abs(area(p))>=40}).map(function(p){return simp(p,.7)}).filter(function(p){return p.length>=3});
+ if(!loops.length)return{adv:350,contours:[]};
+ var minX=1e9,maxX=-1e9;
+ loops.forEach(function(p){p.forEach(function(q){if(q[0]<minX)minX=q[0];if(q[0]>maxX)maxX=q[0]})});
+ var bl=(s.type==="sheet"?(.72-M)/(1-2*M):blPct/100)*H,unit=1000*scale/H;
+ var cs=loops.map(function(p){
+  var n=p.length;
+  return p.map(function(q,k){
+   var a=p[(k+n-1)%n],b=p[(k+1)%n],ux=q[0]-a[0],uy=q[1]-a[1],vx=b[0]-q[0],vy=b[1]-q[1];
+   var cs2=(ux*vx+uy*vy)/((Math.hypot(ux,uy)*Math.hypot(vx,vy))||1);
+   return{x:Math.round((q[0]-minX)*unit+sb),y:Math.round((bl-q[1])*unit),on:cs2<.6};
+  });
+ });
+ return{adv:Math.round((maxX-minX)*unit+2*sb),contours:cs};
+}
+
+/* penulis TTF */
+function B(){this.a=[]}
+B.prototype={
+ u8:function(v){this.a.push(v&255);return this},
+ u16:function(v){this.a.push((v>>8)&255,v&255);return this},
+ u32:function(v){this.a.push((v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255);return this},
+ raw:function(r){for(var i=0;i<r.length;i++)this.a.push(r[i]);return this},
+ pad:function(){while(this.a.length%4)this.a.push(0);return this}
+};
+function sum32(a){var s=0;for(var i=0;i<a.length;i+=4)s=(s+a[i]*16777216+(a[i+1]<<16)+(a[i+2]<<8)+a[i+3])%4294967296;return s}
+function u16s(s){var r=[];for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);r.push(c>>8,c&255)}return r}
+function buildTTF(gl,meta){
+ var n=gl.length,i,j;
+ var glyf=new B(),loca=new B(),hmtx=new B();
+ var gx0=1e9,gy0=1e9,gx1=-1e9,gy1=-1e9,maxP=0,maxC=0,advMax=0,minL=1e9,minR=1e9,maxExt=-1e9,advSum=0;
+ gl.forEach(function(g){
+  loca.u32(glyf.a.length);
+  var pts=[],ends=[];
+  g.contours.forEach(function(c){c.forEach(function(p){pts.push(p)});ends.push(pts.length-1)});
+  var xl=0,yl=0,xh=0,yh=0;
+  if(pts.length){
+   xl=yl=1e9;xh=yh=-1e9;
+   pts.forEach(function(p){xl=Math.min(xl,p.x);xh=Math.max(xh,p.x);yl=Math.min(yl,p.y);yh=Math.max(yh,p.y)});
+   glyf.u16(g.contours.length).u16(xl).u16(yl).u16(xh).u16(yh);
+   ends.forEach(function(e){glyf.u16(e)});
+   glyf.u16(0);
+   pts.forEach(function(p){glyf.u8(p.on?1:0)});
+   var px=0,py=0;
+   pts.forEach(function(p){glyf.u16(p.x-px);px=p.x});
+   pts.forEach(function(p){glyf.u16(p.y-py);py=p.y});
+   glyf.pad();
+   gx0=Math.min(gx0,xl);gy0=Math.min(gy0,yl);gx1=Math.max(gx1,xh);gy1=Math.max(gy1,yh);
+   minL=Math.min(minL,xl);minR=Math.min(minR,g.adv-xh);maxExt=Math.max(maxExt,xh);
+  }
+  maxP=Math.max(maxP,pts.length);maxC=Math.max(maxC,g.contours.length);
+  hmtx.u16(g.adv).u16(xl);advMax=Math.max(advMax,g.adv);advSum+=g.adv;
+ });
+ loca.u32(glyf.a.length);
+ if(gx0>gx1){gx0=gy0=0;gx1=gy1=1000}
+ if(minL>1e8){minL=0;minR=0;maxExt=0}
+ var T={};
+ var d=Math.floor(Date.now()/1000)+2082844800,hi=Math.floor(d/4294967296),lo=d%4294967296;
+ var head=new B().u32(0x00010000).u32(0x00010000).u32(0).u32(0x5F0F3CF5).u16(3).u16(1000).u32(hi).u32(lo).u32(hi).u32(lo).u16(gx0).u16(gy0).u16(gx1).u16(gy1).u16(0).u16(8).u16(2).u16(1).u16(0);
+ var hhea=new B().u32(0x00010000).u16(800).u16(-250).u16(0).u16(advMax).u16(minL).u16(minR).u16(maxExt).u16(1).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(n);
+ var maxp=new B().u32(0x00010000).u16(n).u16(maxP).u16(maxC).u16(0).u16(0).u16(2).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0);
+ var codes=gl.map(function(g,k){return g.u==null?null:{u:g.u,k:k}}).filter(Boolean);
+ var us=codes.map(function(c){return c.u}),first=Math.min.apply(null,us),last=Math.max.apply(null,us);
+ var os2=new B().u16(4).u16(Math.round(advSum/n)).u16(400).u16(5).u16(0)
+  .u16(650).u16(600).u16(0).u16(75).u16(650).u16(600).u16(0).u16(350).u16(50).u16(300).u16(0);
+ for(i=0;i<10;i++)os2.u8(0);
+ os2.u32(1).u32(0).u32(0).u32(0).raw([78,79,78,69]).u16(0xC0).u16(first).u16(last).u16(800).u16(-250).u16(0)
+  .u16(Math.max(800,gy1)).u16(Math.max(250,-gy0)).u32(1).u32(0).u16(500).u16(700).u16(0).u16(32).u16(1);
+ var sc=codes.length+1,lg=Math.floor(Math.log(sc)/Math.LN2),sr=2*Math.pow(2,lg);
+ var cm=new B().u16(0).u16(2).u16(0).u16(3).u32(20).u16(3).u16(1).u32(20);
+ cm.u16(4).u16(16+8*sc).u16(0).u16(sc*2).u16(sr).u16(lg).u16(sc*2-sr);
+ codes.forEach(function(c){cm.u16(c.u)});cm.u16(0xFFFF).u16(0);
+ codes.forEach(function(c){cm.u16(c.u)});cm.u16(0xFFFF);
+ codes.forEach(function(c){cm.u16(c.k-c.u)});cm.u16(1);
+ for(i=0;i<sc;i++)cm.u16(0);
+ var ps=meta.ps,ent=[[0,meta.copy],[1,meta.fam],[2,"Regular"],[3,meta.fam+";1.000"],[4,meta.fam],[5,"Version 1.000"],[6,ps],[9,meta.des],[13,meta.lic]].filter(function(e){return e[1]});
+ var nm=new B().u16(0).u16(ent.length).u16(6+12*ent.length),str=[];
+ ent.forEach(function(e){var b=u16s(e[1]);nm.u16(3).u16(1).u16(0x409).u16(e[0]).u16(b.length).u16(str.length);str=str.concat(b)});
+ nm.raw(str);
+ var post=new B().u32(0x00030000).u32(0).u16(-100).u16(50).u32(0).u32(0).u32(0).u32(0).u32(0);
+ T["OS/2"]=os2;T.cmap=cm;T.glyf=glyf;T.head=head;T.hhea=hhea;T.hmtx=hmtx;T.loca=loca;T.maxp=maxp;T.name=nm;T.post=post;
+ var tags=Object.keys(T).sort(),nt=tags.length,lt=Math.floor(Math.log(nt)/Math.LN2),sR=16*Math.pow(2,lt);
+ var out=new B().u32(0x00010000).u16(nt).u16(sR).u16(lt).u16(nt*16-sR);
+ var off=12+16*nt,bodies=[],headOff=0;
+ tags.forEach(function(t){
+  var tb=T[t],len=tb.a.length;tb.pad();
+  if(t==="head")headOff=off;
+  out.raw(t.split("").map(function(ch){return ch.charCodeAt(0)})).u32(sum32(tb.a)).u32(off).u32(len);
+  bodies.push(tb.a);off+=tb.a.length;
+ });
+ bodies.forEach(function(b){out.raw(b)});
+ var adj=(0xB1B0AFBA-sum32(out.a)+4294967296)%4294967296;
+ out.a[headOff+8]=(adj>>>24)&255;out.a[headOff+9]=(adj>>>16)&255;out.a[headOff+10]=(adj>>>8)&255;out.a[headOff+11]=adj&255;
+ return new Uint8Array(out.a).buffer;
+}
+
+/* bangun */
+function names(){
+ var fam=($("fname").value.trim()||"FontSaya").replace(/[^A-Za-z0-9 ]/g,"").trim()||"FontSaya";
+ return{fam:fam,ps:fam.replace(/ /g,"")+"-Regular",des:$("fdes").value.trim(),lic:$("flic").value.trim(),copy:$("flic").value.trim()};
+}
+function updPrev(){$("prev").textContent=$("ptxt").value}
+$("ptxt").oninput=updPrev;
+$("build").onclick=function(){
+ $("msg").textContent="Memproses...";$("build").disabled=true;
+ setTimeout(function(){
+  try{
+   var off=+$("th").value,sc=+$("sc").value/100,sb=+$("sb").value,bl=+$("bl").value,m=names();
+   var items=[];
+   list().forEach(function(ch){
+    var s=slots[ch];if(!s)return;
+    var g=makeGlyph(s,off,sc,sb,bl);g.u=ch.codePointAt(0);items.push(g);
+   });
+   if(!items.some(function(g){return g.u===32}))items.push({u:32,adv:300,contours:[]});
+   items.sort(function(a,b){return a.u-b.u});
+   var nd=[{x:50,y:0,on:1},{x:50,y:700,on:1},{x:450,y:700,on:1},{x:450,y:0,on:1}],ni=[{x:100,y:50,on:1},{x:400,y:50,on:1},{x:400,y:650,on:1},{x:100,y:650,on:1}];
+   var gl=[{u:null,adv:500,contours:[nd,ni]}].concat(items);
+   fontBuf=buildTTF(gl,m);
+   var face=new FontFace("Pv"+Date.now(),fontBuf.slice(0));
+   face.load().then(function(){
+    document.fonts.add(face);famCss=face.family;
+    var ff="'"+face.family+"',sans-serif";$("prev").style.fontFamily=ff;$("all").style.fontFamily=ff;
+    $("all").textContent=items.filter(function(g){return g.u>32}).map(function(g){return String.fromCodePoint(g.u)}).join(" ");
+    updPrev();$("res").hidden=false;$("res").scrollIntoView({behavior:"smooth"});
+    $("msg").textContent="Font jadi dengan "+items.length+" karakter.";
+   }).catch(function(){$("res").hidden=false;$("msg").textContent="Pratinjau gagal, tetapi file tetap bisa diunduh."});
+  }catch(e){$("msg").textContent="Gagal: "+e.message}
+  $("build").disabled=false;
+ },30);
+};
+$("dl").onclick=function(){if(fontBuf)save(names().ps+".ttf",fontBuf.slice(0))};
+var famCss="";
+function toWoff(ttf){
+ var v=new DataView(ttf),u=new Uint8Array(ttf),n=v.getUint16(4),e=[],i,sfnt=12+16*n;
+ for(i=0;i<n;i++){
+  var o=12+16*i,len=v.getUint32(o+12),d=u.subarray(v.getUint32(o+8),v.getUint32(o+8)+len),c=pako.deflate(d),use=c.length<len?c:d;
+  e.push({tag:u.subarray(o,o+4),cs:v.getUint32(o+4),len:len,use:use});sfnt+=(len+3)&~3;
+ }
+ var off=44+20*n;e.forEach(function(t){t.off=off;off+=(t.use.length+3)&~3});
+ var w=new B().u32(0x774F4646).u32(0x00010000).u32(off).u16(n).u16(0).u32(sfnt).u16(1).u16(0).u32(0).u32(0).u32(0).u32(0).u32(0);
+ e.forEach(function(t){w.raw(t.tag).u32(t.off).u32(t.use.length).u32(t.len).u32(t.cs)});
+ e.forEach(function(t){w.raw(t.use);w.pad()});
+ return new Uint8Array(w.a);
+}
+function license(m){
+ return "LISENSI FONT: "+m.fam+"\nPembuat: "+(m.des||"-")+"\n"+(m.copy||"")+"\n\n"+
+ "Ini contoh lisensi. Sesuaikan dengan kebutuhan Anda sebelum dijual.\n\n"+
+ "LISENSI PRIBADI\n- Boleh dipakai untuk proyek pribadi tanpa tujuan komersial.\n\n"+
+ "LISENSI KOMERSIAL\n- Boleh dipakai untuk logo, kemasan, konten media sosial, produk cetak, dan barang jualan.\n- Satu lisensi berlaku untuk satu pembeli atau satu bisnis.\n\n"+
+ "DILARANG\n- Menjual ulang, membagikan, atau mengunggah ulang file font.\n- Menjual font ini atau hasil modifikasinya sebagai font.\n\n"+
+ "Pembuat tetap memegang hak cipta atas font ini.\n";
+}
+function preview(m){
+ return document.fonts.load("100px '"+famCss+"'").then(function(){
+  var c=document.createElement("canvas");c.width=1600;c.height=1000;
+  var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,1600,1000);g.fillStyle="#111";g.textBaseline="top";
+  g.font="150px '"+famCss+"'";g.fillText(m.fam,80,60);
+  g.font="96px '"+famCss+"'";
+  ["ABCDEFGHIJKLM","NOPQRSTUVWXYZ","abcdefghijklm","nopqrstuvwxyz","0123456789 .,!?-"].forEach(function(t,i){g.fillText(t,80,280+i*130)});
+  g.fillStyle="#777";g.font="28px sans-serif";g.fillText(m.fam+(m.des?" oleh "+m.des:""),80,945);
+  return new Promise(function(r){c.toBlob(r,"image/png")});
+ });
+}
+$("savep").onclick=function(){
+ var s={},k;
+ for(k in slots)s[k]={type:slots[k].type,data:slots[k].src.toDataURL("image/png")};
+ var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,slots:s};
+ save((names().fam.replace(/ /g,"")||"proyek")+"-proyek.json",new Blob([JSON.stringify(p)],{type:"application/json"}));
+};
+$("openp").onchange=function(e){
+ var f=e.target.files[0];e.target.value="";if(!f)return;
+ var r=new FileReader();
+ r.onload=function(){
+  try{
+   var p=JSON.parse(r.result);
+   ["chars","cols","fname","fdes","flic","th","sc","sb","bl"].forEach(function(k){if(p[k]!==undefined){$(k).value=p[k];if($(k+"v"))$(k+"v").textContent=p[k]}});
+   slots={};var pr=Promise.resolve();
+   Object.keys(p.slots||{}).forEach(function(ch){pr=pr.then(function(){return new Promise(function(res){
+    var im=new Image();
+    im.onload=function(){var c=document.createElement("canvas");c.width=im.width;c.height=im.height;c.getContext("2d").drawImage(im,0,0);setSlot(ch,c,p.slots[ch].type);res()};
+    im.onerror=res;im.src=p.slots[ch].data;
+   })})});
+   pr.then(renderSlots);
+  }catch(x){$("msg").textContent="File proyek tidak valid."}
+ };
+ r.readAsText(f);
+};
+$("dlz").onclick=function(){
+ if(!fontBuf)return;
+ if(typeof JSZip==="undefined"||typeof pako==="undefined"){$("msg2").textContent="Pustaka ZIP gagal dimuat. Muat ulang halaman.";return}
+ var m=names();$("msg2").textContent="Menyiapkan paket...";
+ preview(m).then(function(blob){
+  var z=new JSZip();
+  z.file(m.ps+".ttf",fontBuf.slice(0));z.file(m.ps+".woff",toWoff(fontBuf));
+  z.file("LISENSI.txt",license(m));z.file("pratinjau.png",blob);
+  return z.generateAsync({type:"arraybuffer"});
+ }).then(function(d){save(m.fam.replace(/ /g,"")+"-paket.zip",d);$("msg2").textContent="Paket siap."})
+ .catch(function(e){$("msg2").textContent="Gagal: "+e.message});
+};
+renderSlots();
+})();
+</script>
+</body>
+</html>
