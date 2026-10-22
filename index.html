@@ -45,16 +45,23 @@ button:disabled{opacity:.5}
 input[type=file]{display:none}
 .tabs{display:flex;gap:8px;margin-bottom:6px}.tabs button{margin:0;padding:10px}
 .scroll{overflow-x:auto}
-canvas{max-width:100%;border:1px solid var(--bd);border-radius:8px;margin-top:10px;background:#fff}
-.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px;margin-top:10px}
+canvas{max-width:100%;height:auto;border:1px solid var(--bd);border-radius:8px;margin-top:10px;background:#fff}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px;margin-top:10px}
 .slot{aspect-ratio:1;border:1px dashed var(--bd);border-radius:8px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;background:#fff;color:#999;font-size:20px}
-.slot img{width:100%;height:100%;object-fit:contain}
+.slot img{width:100%;height:100%;object-fit:contain;padding:8px}
 .slot b{position:absolute;left:3px;top:1px;font-size:11px;color:#777;background:#fffc;padding:0 3px;border-radius:4px}
 .slot.ok{border-style:solid;border-color:var(--ac)}
 #prev{font-size:44px;min-height:120px;line-height:1.3;word-break:break-all}
 #all{font-size:30px;line-height:1.4;word-break:break-all;border-top:1px solid var(--bd);margin-top:10px;padding-top:10px}
 .msg{font-size:14px;color:var(--mut);margin-top:8px}
 ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
+select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+.chk{display:flex;gap:8px;align-items:flex-start;color:var(--tx);margin-top:12px}.chk input{margin-top:4px;flex:none}
+#det{display:block;margin-left:auto;margin-right:auto}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;overflow:auto;padding:16px;display:flex}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;max-width:720px;width:100%;margin:auto}
+#spec{width:100%}
+.pbar{display:flex;gap:10px;align-items:center}.pbar b{min-width:2.5em;text-align:right;color:var(--mut);font-weight:600}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -81,8 +88,17 @@ ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
 <button id="tabB" class="alt">Gambar per karakter</button>
 </div>
 <div id="pA">
-<p class="msg">Isi template dengan tulisan tangan, foto, lalu pilih foto dari galeri. Aplikasi memotong tiap kotak otomatis.</p>
+<p class="msg">Foto atau scan lembar berisi huruf-huruf. Aplikasi mendeteksi tiap huruf, memisahkannya satu per satu, lalu mengisi kotak karakter di bawah secara berurutan (kiri ke kanan, atas ke bawah) tanpa terpotong.</p>
+<label for="smode">Cara memisahkan huruf</label>
+<select id="smode"><option value="auto">Otomatis: deteksi tiap huruf (disarankan)</option><option value="grid">Per kotak template (untuk lembar dari tombol Unduh template)</option></select>
+<div id="autoOpt">
+<label class="chk"><input type="checkbox" id="mg" checked><span>Gabungkan titik kecil ke huruf di bawahnya (i, j). Matikan bila lembar berisi tanda baca seperti . , ! ?</span></label>
+<label for="sens">Kepekaan deteksi tinta: <b id="sensv">62</b></label>
+<input id="sens" type="range" min="40" max="90" value="62">
+</div>
 <label class="btn" for="sheet">Pilih foto lembar</label><input id="sheet" type="file" accept="image/*">
+<div class="msg" id="sres"></div>
+<canvas id="det" hidden></canvas>
 </div>
 <div id="pB" hidden>
 <p class="msg">Pilih banyak gambar sekaligus (PNG, JPG). Beri nama file sesuai karakter, misalnya A.png atau b.png. File lain mengisi kotak kosong secara berurutan. Satu gambar sebaiknya satu karakter, ukuran bingkai sama, dengan huruf berdiri di garis dasar yang sama.</p>
@@ -90,7 +106,7 @@ ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
 <label for="bl">Garis dasar huruf pada gambar tunggal: <b id="blv">72</b>% dari atas</label>
 <input id="bl" type="range" min="40" max="95" value="72">
 </div>
-<div class="msg">Ketuk kotak di bawah untuk mengganti gambar satu karakter.</div>
+<div class="msg">Hasil per huruf ada di bawah. Ketuk satu kotak untuk mengganti gambar karakter itu.</div>
 <div class="slots" id="slots"></div>
 <input id="one" type="file" accept="image/*">
 </section>
@@ -109,20 +125,24 @@ ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
 <input id="sc" type="range" min="80" max="180" value="130">
 <label for="sb">Jarak antar huruf: <b id="sbv">60</b></label>
 <input id="sb" type="range" min="0" max="160" value="60">
-<button id="build" disabled>Buat font</button>
+<label class="chk"><input type="checkbox" id="fillc"><span>Isi bagian dalam huruf (untuk gambar outline / garis tepi saja)</span></label>
+<button id="build" disabled>Buat font ulang</button>
+<div class="msg">Pratinjau di langkah 4 diperbarui otomatis setiap gambar atau pengaturan berubah.</div>
 <div class="row"><button class="alt" id="savep">Simpan proyek</button><label class="btn alt" for="openp">Buka proyek</label></div>
 <input id="openp" type="file" accept=".json,application/json">
 <div class="msg" id="msg"></div>
 </section>
 
 <section id="res" hidden>
-<h2><span>4</span>Coba dan unduh</h2>
+<h2><span>4</span>Pratinjau dan unduh</h2>
+<label for="ptxt">Ketik teks untuk dicoba</label>
 <textarea id="ptxt" rows="2">Halo Dunia 123</textarea>
+<label for="psz">Ukuran pratinjau</label>
+<div class="pbar"><input id="psz" type="range" min="20" max="120" value="44"><b id="pszv">44</b></div>
 <div id="prev"></div>
 <div id="all"></div>
-<button id="dl">Unduh font (.ttf)</button>
-<button id="dlz" class="alt">Unduh paket jual (.zip)</button>
-<div class="msg" id="msg2">Paket berisi TTF, WOFF untuk web, gambar pratinjau PNG, dan contoh lisensi.</div>
+<div class="msg">Huruf yang belum diisi tampil dengan font cadangan, bukan font Anda.</div>
+<button id="openm">Pratinjau lengkap dan unduh</button>
 <div class="msg">Sebelum dijual, uji font di Word, Canva, dan Photoshop. Cek tiap huruf dan jarak antar huruf.</div>
 <ul>
 <li>Marketplace font umumnya meminta huruf besar, huruf kecil, angka, dan tanda baca lengkap.</li>
@@ -130,12 +150,24 @@ ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
 <li>Font ini belum memiliki kerning dan hinting. Tambahkan di FontForge atau Glyphs bila platform meminta.</li>
 </ul>
 </section>
+
+<div class="ov" id="mdl" hidden>
+<div class="box">
+<h2>Pratinjau sebelum unduh</h2>
+<canvas id="spec"></canvas>
+<div class="msg" id="minfo"></div>
+<button id="dl">Unduh font (.ttf)</button>
+<button id="dlz" class="alt">Unduh paket jual (.zip)</button>
+<button id="cls" class="alt">Kembali mengedit</button>
+<div class="msg" id="msg2">Paket berisi TTF, WOFF untuk web, gambar pratinjau PNG, dan contoh lisensi.</div>
+</div>
+</div>
 </main>
 
 <script>
 (function(){
 var $=function(i){return document.getElementById(i)};
-var CELL=200,M=.03,slots={},fontBuf=null,downloads=null,repCh=null;
+var CELL=200,M=.03,slots={},fontBuf=null,downloads=null,repCh=null,lastSheet=null,curChars="",bt=null;
 try{claude.use("downloads").then(function(d){downloads=d})}catch(e){}
 
 function list(){return Array.from(new Set(Array.from($("chars").value.replace(/\s/g,"")))).filter(function(c){return c.codePointAt(0)<65536})}
@@ -148,7 +180,8 @@ function save(name,data){
  }
  downloads.save({filename:name,data:data}).catch(function(e){if(e&&e.code!=="declined")$("msg").textContent="Gagal menyimpan: "+(e.message||e.code)});
 }
-["th","sc","sb","bl"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
+["th","sc","sb","bl","sens"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
+["th","sc","sb","fillc"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
 
 /* tab */
 $("tabA").onclick=function(){$("pA").hidden=false;$("pB").hidden=true;$("tabA").className="";$("tabB").className="alt"};
@@ -177,7 +210,7 @@ function loadCanvas(file,lim){return new Promise(function(res,rej){
  im.onerror=rej;im.src=u})}
 function thumb(c){var t=document.createElement("canvas"),h=80;t.width=Math.max(1,Math.round(h*c.width/c.height));t.height=h;
  var g=t.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,t.width,h);g.drawImage(c,0,0,t.width,h);return t.toDataURL("image/png")}
-function setSlot(ch,c,type){slots[ch]={src:c,type:type,url:thumb(c)}}
+function setSlot(ch,c,type,hf,blf){slots[ch]={src:c,type:type,url:thumb(c),hf:hf,blf:blf}}
 function renderSlots(){
  var box=$("slots");box.innerHTML="";var n=0;
  list().forEach(function(ch){
@@ -189,21 +222,179 @@ function renderSlots(){
  });
  $("build").disabled=n===0;
  $("msg").textContent=n+" dari "+list().length+" karakter terisi.";
+ if(n>0)sched(700);
 }
 $("chars").oninput=renderSlots;
-$("sheet").onchange=function(e){
- var f=e.target.files[0];if(!f)return;
- loadCanvas(f,3600).then(function(im){
-  var l=list(),c=cols(),r=Math.ceil(l.length/c),cw=im.width/c,chh=im.height/r;
-  l.forEach(function(ch,i){
-   var sx=(i%c)*cw+cw*M,sy=Math.floor(i/c)*chh+chh*M,sw=cw*(1-2*M),sh=chh*(1-2*M),k=Math.min(1,600/sh);
-   var cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(sw*k));cv.height=Math.max(1,Math.round(sh*k));
-   cv.getContext("2d").drawImage(im,sx,sy,sw,sh,0,0,cv.width,cv.height);
-   setSlot(ch,cv,"sheet");
+/* pemisahan huruf dari foto lembar */
+function dilate(m,W,H,r){
+ var a=new Uint8Array(W*H),b=new Uint8Array(W*H),x,y,l,i;
+ for(y=0;y<H;y++){l=-1e9;for(x=0;x<W;x++){i=y*W+x;if(m[i])l=x;if(x-l<=r)a[i]=1}
+  l=1e9;for(x=W-1;x>=0;x--){i=y*W+x;if(m[i])l=x;if(l-x<=r)a[i]=1}}
+ for(x=0;x<W;x++){l=-1e9;for(y=0;y<H;y++){i=y*W+x;if(a[i])l=y;if(y-l<=r)b[i]=1}
+  l=1e9;for(y=H-1;y>=0;y--){i=y*W+x;if(a[i])l=y;if(l-y<=r)b[i]=1}}
+ return b;
+}
+function fnd(p,a){while(p[a]!==a){p[a]=p[p[a]];a=p[a]}return a}
+function autoSplit(im){
+ var W=im.width,H=im.height,n=W*H,px=im.getContext("2d").getImageData(0,0,W,H).data,i,x,y;
+ var lum=new Uint8ClampedArray(n);
+ for(i=0;i<n;i++)lum[i]=.299*px[i*4]+.587*px[i*4+1]+.114*px[i*4+2];
+ /* ambang adaptif: tinta = lebih gelap dari rata-rata sekitarnya */
+ var ratio=(+$("sens").value)/100,r=(Math.max(31,Math.round(Math.min(W,H)/8))|1)>>1,W1=W+1;
+ var ii=new Uint32Array(W1*(H+1));
+ for(y=0;y<H;y++){var rs=0;for(x=0;x<W;x++){rs+=lum[y*W+x];ii[(y+1)*W1+x+1]=ii[y*W1+x+1]+rs}}
+ var ink=new Uint8Array(n);
+ for(y=0;y<H;y++){var ya=Math.max(0,y-r),yb=Math.min(H,y+r+1);
+  for(x=0;x<W;x++){var xa=Math.max(0,x-r),xb=Math.min(W,x+r+1),v=lum[y*W+x];
+   if(v>=200)continue;
+   var m=(ii[yb*W1+xb]-ii[ya*W1+xb]-ii[yb*W1+xa]+ii[ya*W1+xa])/((xb-xa)*(yb-ya));
+   if(v<m*ratio)ink[y*W+x]=1}}
+ var minS=Math.min(W,H),rc=Math.floor(minS/1500),ink2=rc>0?dilate(ink,W,H,rc):ink;
+ /* komponen terhubung */
+ var lab=new Int32Array(n),stack=new Int32Array(n),comps=[null],nl=0;
+ for(i=0;i<n;i++){
+  if(!ink2[i]||lab[i])continue;
+  nl++;var sp=0,x0=W,y0=H,x1=-1,y1=-1,ar=0;stack[sp++]=i;lab[i]=nl;
+  while(sp){
+   var p=stack[--sp],cx=p%W,cy=(p-cx)/W;ar++;
+   if(cx<x0)x0=cx;if(cx>x1)x1=cx;if(cy<y0)y0=cy;if(cy>y1)y1=cy;
+   for(var dy=-1;dy<=1;dy++){var ny=cy+dy;if(ny<0||ny>=H)continue;
+    for(var dx=-1;dx<=1;dx++){var nx=cx+dx;if(nx<0||nx>=W)continue;var q=ny*W+nx;if(ink2[q]&&!lab[q]){lab[q]=nl;stack[sp++]=q}}}
+  }
+  comps.push({id:nl,x0:x0,y0:y0,x1:x1+1,y1:y1+1,ar:ar});
+ }
+ var minD=Math.max(6,Math.round(minS*.006)),cs=comps.filter(function(c){return c&&Math.max(c.x1-c.x0,c.y1-c.y0)>=minD});
+ if(cs.length>1)cs=cs.filter(function(c){return !((c.x1-c.x0)>.8*W||(c.y1-c.y0)>.8*H)});
+ if(!cs.length)return{count:0};
+ if(cs.length>2500)return{count:0,noisy:true};
+ var kept=new Uint8Array(nl+1),par=new Int32Array(nl+1);
+ for(i=0;i<=nl;i++)par[i]=i;
+ cs.forEach(function(c){kept[c.id]=1});
+ /* bagian dalam huruf (lubang/outline dalam) digabung ke huruf pembungkusnya */
+ var sorted=cs.slice().sort(function(a,b){return (a.x1-a.x0)*(a.y1-a.y0)-(b.x1-b.x0)*(b.y1-b.y0)});
+ sorted.forEach(function(a,ia){
+  for(var j=ia+1;j<sorted.length;j++){var b=sorted[j];
+   if(b.x0<=a.x0+2&&b.y0<=a.y0+2&&b.x1>=a.x1-2&&b.y1>=a.y1-2){par[fnd(par,a.id)]=fnd(par,b.id);break}}
+ });
+ function groups(){
+  var mp={},out=[];
+  cs.forEach(function(c){var rt=fnd(par,c.id),g=mp[rt];
+   if(!g){mp[rt]={id:rt,x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1};out.push(mp[rt])}
+   else{g.x0=Math.min(g.x0,c.x0);g.y0=Math.min(g.y0,c.y0);g.x1=Math.max(g.x1,c.x1);g.y1=Math.max(g.y1,c.y1)}});
+  out.forEach(function(g){g.w=g.x1-g.x0;g.h=g.y1-g.y0;g.cx=(g.x0+g.x1)/2;g.cy=(g.y0+g.y1)/2});
+  return out;
+ }
+ var gs=groups(),hs=gs.map(function(g){return g.h}).sort(function(a,b){return b-a}),hRef=hs[Math.floor(hs.length/3)];
+ var isSmall={},byId={};
+ gs.forEach(function(g){g.big=Math.max(g.w,g.h)>=.34*hRef;byId[g.id]=g;if(!g.big)isSmall[g.id]=true});
+ /* titik (i, j, !, ?) digabung ke huruf terdekat */
+ if($("mg").checked){
+  var maxD=Math.round(.3*hRef),pairs=[];
+  var hit=function(g,dir){
+   var yy=dir>0?g.y1:g.y0-1;
+   for(var c=0;c<maxD&&yy>=0&&yy<H;yy+=dir,c++)
+    for(var xx=g.x0;xx<g.x1;xx++){var l=lab[yy*W+xx];
+     if(l&&kept[l]){var rt=fnd(par,l);
+      if(rt===g.id||isSmall[rt])continue;
+      var t2=byId[rt];
+      /* titik harus benar-benar di atas / di bawah huruf targetnya */
+      if(dir>0?t2.cy>g.cy:t2.cy<g.cy)return{d:c,r:rt}}}
+   return null;
+  };
+  gs.forEach(function(g){
+   if(g.big)return;
+   var dn=hit(g,1),up=hit(g,-1),t=null;
+   if(dn)t=dn.r;else if(up)t=up.r;
+   if(t!==null)pairs.push([g.id,t]);
   });
+  pairs.forEach(function(p){par[fnd(par,p[0])]=fnd(par,p[1])});
+  gs=groups();gs.forEach(function(g){g.big=Math.max(g.w,g.h)>=.34*hRef});
+ }
+ /* urutan baca: baris dari atas ke bawah, tiap baris kiri ke kanan */
+ gs.sort(function(a,b){return a.cy-b.cy});
+ var rows=[];
+ gs.forEach(function(g){
+  var rw=rows[rows.length-1];
+  if(rw&&Math.min(g.y1,rw.y1)-Math.max(g.y0,rw.y0)>.35*g.h){rw.g.push(g);rw.y0=Math.min(rw.y0,g.y0);rw.y1=Math.max(rw.y1,g.y1);return}
+  rows.push({g:[g],y0:g.y0,y1:g.y1});
+ });
+ var seq=[],up=1,dnn=0,ref=1;
+ rows.forEach(function(rw){
+  rw.g.sort(function(a,b){return a.cx-b.cx});
+  var bs=rw.g.filter(function(g){return g.big}).map(function(g){return g.y1});
+  if(!bs.length)bs=rw.g.map(function(g){return g.y1});
+  bs.sort(function(a,b){return a-b});var base=bs[bs.length>>1];
+  rw.g.forEach(function(g){g.base=base;up=Math.max(up,base-g.y0);dnn=Math.max(dnn,g.y1-base);if(g.big)ref=Math.max(ref,g.h);seq.push(g)});
+ });
+ var pad=Math.max(4,Math.round(.07*(up+dnn))),Hc=up+dnn+2*pad;
+ var rootOf=new Int32Array(nl+1);
+ cs.forEach(function(c){rootOf[c.id]=fnd(par,c.id)});
+ /* potong tiap huruf: hanya piksel milik huruf itu, jadi tetangga tidak ikut dan tidak ada bagian yang terpotong */
+ var lst=list(),out=[];
+ seq.forEach(function(g,k){
+  var cv=document.createElement("canvas");cv.width=g.w+2*pad;cv.height=Hc;
+  var cg=cv.getContext("2d");cg.fillStyle="#fff";cg.fillRect(0,0,cv.width,cv.height);
+  var id=cg.createImageData(g.w,g.h),d=id.data,yy,xx;
+  for(i=0;i<d.length;i++)d[i]=255;
+  for(yy=0;yy<g.h;yy++)for(xx=0;xx<g.w;xx++){
+   var si=(g.y0+yy)*W+g.x0+xx,l=lab[si];
+   if(l&&kept[l]&&rootOf[l]===g.id){var di=(yy*g.w+xx)*4;d[di]=px[si*4];d[di+1]=px[si*4+1];d[di+2]=px[si*4+2]}
+  }
+  cg.putImageData(id,pad,Math.round(pad+up+(g.y0-g.base)));
+  out.push(cv);
+ });
+ return{count:seq.length,seq:seq,crops:out,hf:ref/Hc,blf:(pad+up)/Hc,W:W,H:H};
+}
+function gridSplit(im){
+ var l=list(),c=cols(),r=Math.ceil(l.length/c),cw=im.width/c,chh=im.height/r;
+ l.forEach(function(ch,i){
+  var sx=(i%c)*cw+cw*M,sy=Math.floor(i/c)*chh+chh*M,sw=cw*(1-2*M),sh=chh*(1-2*M),k=Math.min(1,600/sh);
+  var cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(sw*k));cv.height=Math.max(1,Math.round(sh*k));
+  cv.getContext("2d").drawImage(im,sx,sy,sw,sh,0,0,cv.width,cv.height);
+  setSlot(ch,cv,"sheet");
+ });
+}
+function drawDet(im,res){
+ var cv=$("det"),k=Math.min(1,900/im.width),l=list();
+ cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);
+ var g=cv.getContext("2d");g.drawImage(im,0,0,cv.width,cv.height);
+ g.lineWidth=2;g.font="bold 14px sans-serif";g.textBaseline="top";
+ res.seq.forEach(function(s,i){
+  var ok=i<l.length,x=s.x0*k,y=s.y0*k,w=s.w*k,h=s.h*k;
+  g.strokeStyle=ok?"#c2410c":"#dc2626";g.setLineDash(ok?[]:[5,4]);g.strokeRect(x,y,w,h);
+  if(ok){var t=l[i],tw=g.measureText(t).width+8;g.fillStyle="#c2410c";g.fillRect(x,y,tw,18);g.fillStyle="#fff";g.fillText(t,x+4,y+2)}
+ });
+ g.setLineDash([]);cv.hidden=false;
+}
+function runSheet(){
+ if(!lastSheet)return;
+ slots={};$("det").hidden=true;
+ if($("smode").value==="grid"){gridSplit(lastSheet);$("sres").textContent="Dipotong sesuai kotak template ("+cols()+" kolom).";renderSlots();return}
+ $("sres").textContent="Mendeteksi huruf...";
+ setTimeout(function(){
+  var res;
+  try{res=autoSplit(lastSheet)}catch(e){$("sres").textContent="Gagal mendeteksi: "+e.message;renderSlots();return}
+  var l=list();
+  if(!res.count){$("sres").textContent=res.noisy?"Gambar terlalu berisik. Pakai foto yang lebih bersih atau turunkan kepekaan.":"Tidak ada huruf terdeteksi. Pastikan tulisan gelap di atas kertas terang, lalu coba naikkan kepekaan.";renderSlots();return}
+  res.seq.slice(0,l.length).forEach(function(s,i){setSlot(l[i],res.crops[i],"auto",res.hf,res.blf)});
+  drawDet(lastSheet,res);
+  var f=Math.min(res.count,l.length),msg=res.count+" huruf terdeteksi, "+f+" kotak terisi";
+  if(f>0)msg+=" ("+l[0]+(f>1?" sampai "+l[f-1]:"")+")";
+  msg+=".";
+  if(res.count>l.length)msg+=" "+(res.count-l.length)+" huruf sisa diabaikan (kotak merah putus-putus). Tambah karakter di langkah 1 bila perlu.";
+  else if(res.count<l.length)msg+=" Sisa kotak dibiarkan kosong. Urutan huruf mengikuti daftar karakter di langkah 1.";
+  $("sres").textContent=msg;
   renderSlots();
- }).catch(function(){$("msg").textContent="Gambar tidak bisa dibaca."});
+ },30);
+}
+$("sheet").onchange=function(e){
+ var f=e.target.files[0];e.target.value="";if(!f)return;
+ $("sres").textContent="Membaca gambar...";
+ loadCanvas(f,2400).then(function(im){lastSheet=im;runSheet()}).catch(function(){$("sres").textContent="Gambar tidak bisa dibaca."});
 };
+$("smode").onchange=function(){$("autoOpt").hidden=$("smode").value==="grid";runSheet()};
+$("mg").onchange=runSheet;
+$("sens").onchange=runSheet;
 $("imgs").onchange=function(e){
  var fs=Array.from(e.target.files).sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
  var l=list(),p=Promise.resolve();
@@ -220,53 +411,6 @@ $("one").onchange=function(e){
  loadCanvas(f,900).then(function(c){setSlot(repCh,c,"img");renderSlots()});
 };
 
-/* vektorisasi */
-function otsu(l){
- var h=new Array(256).fill(0),n=l.length,i,sum=0;
- for(i=0;i<n;i++)h[l[i]|0]++;
- for(i=0;i<256;i++)sum+=i*h[i];
- var sB=0,wB=0,mx=0,t=128;
- for(i=0;i<256;i++){wB+=h[i];if(!wB)continue;var wF=n-wB;if(!wF)break;sB+=i*h[i];
-  var mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;t=i}}
- return t+1;
-}
-function trace(F,w,h){
- var nxt=new Map(),wh=w*h;
- function hk(x,y){return y*w+x}function vk(x,y){return wh+y*w+x}
- for(var y=0;y<h-1;y++)for(var x=0;x<w-1;x++){
-  var i=(F[y*w+x]>0?1:0)|(F[y*w+x+1]>0?2:0)|(F[(y+1)*w+x+1]>0?4:0)|(F[(y+1)*w+x]>0?8:0);
-  if(i===0||i===15)continue;
-  var T=hk(x,y),B=hk(x,y+1),L=vk(x,y),R=vk(x+1,y);
-  switch(i){
-   case 1:nxt.set(L,T);break;case 2:nxt.set(T,R);break;case 4:nxt.set(R,B);break;case 8:nxt.set(B,L);break;
-   case 3:nxt.set(L,R);break;case 6:nxt.set(T,B);break;case 12:nxt.set(R,L);break;case 9:nxt.set(B,T);break;
-   case 7:nxt.set(L,B);break;case 11:nxt.set(B,R);break;case 13:nxt.set(R,T);break;case 14:nxt.set(T,L);break;
-   case 5:nxt.set(L,T);nxt.set(R,B);break;case 10:nxt.set(T,R);nxt.set(B,L);break;
-  }
- }
- function pos(k){
-  var a,x,y,v0,v1,t;
-  if(k<wh){y=Math.floor(k/w);x=k%w;v0=F[k];v1=F[k+1];t=v0/(v0-v1);return[x+t-.5,y-.5]}
-  a=k-wh;y=Math.floor(a/w);x=a%w;v0=F[a];v1=F[a+w];t=v0/(v0-v1);return[x-.5,y+t-.5];
- }
- var seen=new Set(),loops=[];
- nxt.forEach(function(_,s){
-  if(seen.has(s))return;
-  var cur=s,pts=[],ok=false;
-  while(cur!==undefined&&!seen.has(cur)){seen.add(cur);pts.push(pos(cur));cur=nxt.get(cur)}
-  if(cur===s&&pts.length>3)loops.push(pts);
- });
- return loops;
-}
-function area(p){var a=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1]}return a/2}
-function simp(p,eps){
- var n=p.length;if(n<6)return p;
- var q=p.concat([p[0]]),keep=new Uint8Array(n+1),f=0,fd=0,i;
- keep[0]=keep[n]=1;
- for(i=1;i<n;i++){var dx=p[i][0]-p[0][0],dy=p[i][1]-p[0][1],dd=dx*dx+dy*dy;if(dd>fd){fd=dd;f=i}}
- keep[f]=1;
- function rec(a,b){
-  if(b<=a+1)return;
   var ax=q[a][0],ay=q[a][1],dx=q[b][0]-ax,dy=q[b][1]-ay,L=Math.sqrt(dx*dx+dy*dy)||1,m=-1,mi=-1;
   for(var j=a+1;j<b;j++){var d=Math.abs((q[j][0]-ax)*dy-(q[j][1]-ay)*dx)/L;if(d>m){m=d;mi=j}}
   if(m>eps){keep[mi]=1;rec(a,mi);rec(mi,b)}
@@ -275,7 +419,17 @@ function simp(p,eps){
  var out=[];for(i=0;i<n;i++)if(keep[i])out.push(q[i]);
  return out;
 }
-function makeGlyph(s,off,scale,sb,blPct){
+function inside(pt,poly){var x=pt[0],y=pt[1],c=false;for(var i=0,j=poly.length-1;i<poly.length;j=i++){var a=poly[i],b=poly[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+/* huruf outline: buang tepi dalam tiap garis, isi badan huruf, pertahankan lubang */
+function fillLoops(L){var out=[];L.forEach(function(p,i){var d=0;L.forEach(function(q,j){if(i!==j&&inside(p[0],q))d++});if(d%2===0)out.push(d%4===2?p.slice().reverse():p)});return out}
+/* tutup celah kecil pada garis outline sebelum diisi (filter minimum pada kecerahan) */
+function minF(a,W,H,r){
+ var t=new Float32Array(a.length),o=new Float32Array(a.length),x,y,k,m,i;
+ for(y=0;y<H;y++)for(x=0;x<W;x++){m=255;for(k=Math.max(0,x-r);k<=Math.min(W-1,x+r);k++){i=a[y*W+k];if(i<m)m=i}t[y*W+x]=m}
+ for(x=0;x<W;x++)for(y=0;y<H;y++){m=255;for(k=Math.max(0,y-r);k<=Math.min(H-1,y+r);k++){i=t[k*W+x];if(i<m)m=i}o[y*W+x]=m}
+ return o;
+}
+function makeGlyph(s,off,scale,sb,blPct,fill){
  var H=480,W=Math.min(960,Math.max(60,Math.round(H*s.src.width/s.src.height)));
  var c=document.createElement("canvas");c.width=W;c.height=H;
  var g=c.getContext("2d",{willReadFrequently:true});
@@ -283,13 +437,17 @@ function makeGlyph(s,off,scale,sb,blPct){
  var px=g.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),mn=255,i;
  for(i=0;i<W*H;i++){var v=.299*px[i*4]+.587*px[i*4+1]+.114*px[i*4+2];lum[i]=v;if(v<mn)mn=v}
  if(mn>215)return{adv:350,contours:[]};
+ if(fill)lum=minF(lum,W,H,3);
  var t=Math.min(otsu(lum),170)+off,w=W+2,h=H+2,F=new Float32Array(w*h).fill(-60);
  for(var y=0;y<H;y++)for(var x=0;x<W;x++)F[(y+1)*w+x+1]=t-lum[y*W+x];
  var loops=trace(F,w,h).filter(function(p){return Math.abs(area(p))>=40}).map(function(p){return simp(p,.7)}).filter(function(p){return p.length>=3});
+ if(fill)loops=fillLoops(loops);
  if(!loops.length)return{adv:350,contours:[]};
  var minX=1e9,maxX=-1e9;
  loops.forEach(function(p){p.forEach(function(q){if(q[0]<minX)minX=q[0];if(q[0]>maxX)maxX=q[0]})});
- var bl=(s.type==="sheet"?(.72-M)/(1-2*M):blPct/100)*H,unit=1000*scale/H;
+ var bl,unit;
+ if(s.type==="auto"){bl=s.blf*H;unit=1000*scale*.54/(H*s.hf)}
+ else{bl=(s.type==="sheet"?(.72-M)/(1-2*M):blPct/100)*H;unit=1000*scale/H}
  var cs=loops.map(function(p){
   var n=p.length;
   return p.map(function(q,k){
@@ -386,35 +544,42 @@ function names(){
  var fam=($("fname").value.trim()||"FontSaya").replace(/[^A-Za-z0-9 ]/g,"").trim()||"FontSaya";
  return{fam:fam,ps:fam.replace(/ /g,"")+"-Regular",des:$("fdes").value.trim(),lic:$("flic").value.trim(),copy:$("flic").value.trim()};
 }
-function updPrev(){$("prev").textContent=$("ptxt").value}
+function updPrev(){var p=$("prev");p.textContent=$("ptxt").value;p.style.fontSize=$("psz").value+"px"}
 $("ptxt").oninput=updPrev;
-$("build").onclick=function(){
+$("psz").oninput=function(){$("pszv").textContent=$("psz").value;updPrev()};
+function sched(ms){clearTimeout(bt);bt=setTimeout(function(){rebuild(false)},ms||600)}
+function rebuild(manual){
+ clearTimeout(bt);
  $("msg").textContent="Memproses...";$("build").disabled=true;
  setTimeout(function(){
   try{
-   var off=+$("th").value,sc=+$("sc").value/100,sb=+$("sb").value,bl=+$("bl").value,m=names();
+   var off=+$("th").value,sc=+$("sc").value/100,sb=+$("sb").value,bl=+$("bl").value,fill=$("fillc").checked,m=names();
    var items=[];
    list().forEach(function(ch){
     var s=slots[ch];if(!s)return;
-    var g=makeGlyph(s,off,sc,sb,bl);g.u=ch.codePointAt(0);items.push(g);
+    var g=makeGlyph(s,off,sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
    });
+   if(!items.length){$("build").disabled=true;$("msg").textContent="Belum ada karakter terisi.";return}
    if(!items.some(function(g){return g.u===32}))items.push({u:32,adv:300,contours:[]});
    items.sort(function(a,b){return a.u-b.u});
    var nd=[{x:50,y:0,on:1},{x:50,y:700,on:1},{x:450,y:700,on:1},{x:450,y:0,on:1}],ni=[{x:100,y:50,on:1},{x:400,y:50,on:1},{x:400,y:650,on:1},{x:100,y:650,on:1}];
    var gl=[{u:null,adv:500,contours:[nd,ni]}].concat(items);
    fontBuf=buildTTF(gl,m);
+   curChars=items.filter(function(g){return g.u>32}).map(function(g){return String.fromCodePoint(g.u)}).join("");
    var face=new FontFace("Pv"+Date.now(),fontBuf.slice(0));
    face.load().then(function(){
     document.fonts.add(face);famCss=face.family;
     var ff="'"+face.family+"',sans-serif";$("prev").style.fontFamily=ff;$("all").style.fontFamily=ff;
-    $("all").textContent=items.filter(function(g){return g.u>32}).map(function(g){return String.fromCodePoint(g.u)}).join(" ");
-    updPrev();$("res").hidden=false;$("res").scrollIntoView({behavior:"smooth"});
-    $("msg").textContent="Font jadi dengan "+items.length+" karakter.";
+    $("all").textContent=Array.from(curChars).join(" ");
+    updPrev();$("res").hidden=false;
+    if(manual)$("res").scrollIntoView({behavior:"smooth"});
+    $("msg").textContent="Pratinjau siap dengan "+Array.from(curChars).length+" karakter. Lihat langkah 4.";
    }).catch(function(){$("res").hidden=false;$("msg").textContent="Pratinjau gagal, tetapi file tetap bisa diunduh."});
   }catch(e){$("msg").textContent="Gagal: "+e.message}
   $("build").disabled=false;
  },30);
-};
+}
+$("build").onclick=function(){rebuild(true)};
 $("dl").onclick=function(){if(fontBuf)save(names().ps+".ttf",fontBuf.slice(0))};
 var famCss="";
 function toWoff(ttf){
@@ -437,20 +602,33 @@ function license(m){
  "DILARANG\n- Menjual ulang, membagikan, atau mengunggah ulang file font.\n- Menjual font ini atau hasil modifikasinya sebagai font.\n\n"+
  "Pembuat tetap memegang hak cipta atas font ini.\n";
 }
-function preview(m){
- return document.fonts.load("100px '"+famCss+"'").then(function(){
-  var c=document.createElement("canvas");c.width=1600;c.height=1000;
-  var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,1600,1000);g.fillStyle="#111";g.textBaseline="top";
-  g.font="150px '"+famCss+"'";g.fillText(m.fam,80,60);
-  g.font="96px '"+famCss+"'";
-  ["ABCDEFGHIJKLM","NOPQRSTUVWXYZ","abcdefghijklm","nopqrstuvwxyz","0123456789 .,!?-"].forEach(function(t,i){g.fillText(t,80,280+i*130)});
-  g.fillStyle="#777";g.font="28px sans-serif";g.fillText(m.fam+(m.des?" oleh "+m.des:""),80,945);
-  return new Promise(function(r){c.toBlob(r,"image/png")});
+function drawSpec(m){
+ return document.fonts.load("100px '"+famCss+"'",curChars).then(function(){
+  var cs=Array.from(curChars),per=8,lines=[],i;
+  for(i=0;i<cs.length;i+=per)lines.push(cs.slice(i,i+per).join(" "));
+  var c=document.createElement("canvas");c.width=1600;c.height=360+lines.length*210+120;
+  var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.fillStyle="#111";g.textBaseline="top";
+  var ok=Array.from(m.fam).every(function(ch){return cs.indexOf(ch)>=0||ch===" "});
+  g.font="200px '"+famCss+"'";g.fillText(ok?m.fam:cs.slice(0,6).join(""),80,60);
+  g.font="160px '"+famCss+"'";
+  lines.forEach(function(t,k){g.fillText(t,80,360+k*210)});
+  g.fillStyle="#777";g.font="30px sans-serif";g.fillText(m.fam+(m.des?" oleh "+m.des:"")+" | "+cs.length+" karakter",80,c.height-70);
+  return c;
  });
 }
+function preview(m){return drawSpec(m).then(function(c){return new Promise(function(r){c.toBlob(r,"image/png")})})}
+$("openm").onclick=function(){
+ if(!fontBuf)return;
+ var m=names();$("mdl").hidden=false;document.body.style.overflow="hidden";
+ $("minfo").textContent=m.ps+".ttf, "+Array.from(curChars).length+" karakter, "+Math.round(fontBuf.byteLength/1024)+" KB. Periksa tiap huruf sebelum mengunduh.";
+ drawSpec(m).then(function(c){var sp=$("spec");sp.width=c.width;sp.height=c.height;sp.getContext("2d").drawImage(c,0,0)});
+};
+function closeM(){$("mdl").hidden=true;document.body.style.overflow=""}
+$("cls").onclick=closeM;
+$("mdl").onclick=function(e){if(e.target===$("mdl"))closeM()};
 $("savep").onclick=function(){
  var s={},k;
- for(k in slots)s[k]={type:slots[k].type,data:slots[k].src.toDataURL("image/png")};
+ for(k in slots)s[k]={type:slots[k].type,hf:slots[k].hf,blf:slots[k].blf,data:slots[k].src.toDataURL("image/png")};
  var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,slots:s};
  save((names().fam.replace(/ /g,"")||"proyek")+"-proyek.json",new Blob([JSON.stringify(p)],{type:"application/json"}));
 };
@@ -464,7 +642,7 @@ $("openp").onchange=function(e){
    slots={};var pr=Promise.resolve();
    Object.keys(p.slots||{}).forEach(function(ch){pr=pr.then(function(){return new Promise(function(res){
     var im=new Image();
-    im.onload=function(){var c=document.createElement("canvas");c.width=im.width;c.height=im.height;c.getContext("2d").drawImage(im,0,0);setSlot(ch,c,p.slots[ch].type);res()};
+    im.onload=function(){var c=document.createElement("canvas");c.width=im.width;c.height=im.height;c.getContext("2d").drawImage(im,0,0);setSlot(ch,c,p.slots[ch].type,p.slots[ch].hf,p.slots[ch].blf);res()};
     im.onerror=res;im.src=p.slots[ch].data;
    })})});
    pr.then(renderSlots);
