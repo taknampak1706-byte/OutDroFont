@@ -96,6 +96,13 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <label for="sens">Kepekaan deteksi tinta: <b id="sensv">62</b></label>
 <input id="sens" type="range" min="40" max="90" value="62">
 </div>
+<div id="lcOpt">
+<label class="chk"><input type="checkbox" id="lcm"><span>Pakai gambar huruf besar juga untuk huruf kecil (a-z otomatis sama dengan A-Z). Kotak huruf kecil yang sudah Anda isi sendiri tidak ditimpa.</span></label>
+<div id="lcSz" hidden>
+<label for="lcs">Ukuran huruf kecil dibanding huruf besar: <b id="lcsv">100</b>%</label>
+<input id="lcs" type="range" min="50" max="100" value="100">
+</div>
+</div>
 <label class="btn" for="sheet">Pilih foto lembar</label><input id="sheet" type="file" accept="image/*">
 <div class="msg" id="sres"></div>
 <canvas id="det" hidden></canvas>
@@ -180,8 +187,9 @@ function save(name,data){
  }
  downloads.save({filename:name,data:data}).catch(function(e){if(e&&e.code!=="declined")$("msg").textContent="Gagal menyimpan: "+(e.message||e.code)});
 }
-["th","sc","sb","bl","sens"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
-["th","sc","sb","fillc"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
+["th","sc","sb","bl","sens","lcs"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
+["th","sc","sb","fillc","lcs"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
+$("lcm").onchange=renderSlots;
 
 /* tab */
 $("tabA").onclick=function(){$("pA").hidden=false;$("pB").hidden=true;$("tabA").className="";$("tabB").className="alt"};
@@ -211,7 +219,21 @@ function loadCanvas(file,lim){return new Promise(function(res,rej){
 function thumb(c){var t=document.createElement("canvas"),h=80;t.width=Math.max(1,Math.round(h*c.width/c.height));t.height=h;
  var g=t.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,t.width,h);g.drawImage(c,0,0,t.width,h);return t.toDataURL("image/png")}
 function setSlot(ch,c,type,hf,blf){slots[ch]={src:c,type:type,url:thumb(c),hf:hf,blf:blf}}
+function applyLc(){
+ var l=list(),k,on=$("lcm").checked;
+ for(k in slots)if(slots[k].mirror)delete slots[k];
+ $("lcSz").hidden=!on;
+ if(!on)return;
+ l.forEach(function(ch){
+  var up=ch.toUpperCase();
+  if(up===ch||Array.from(up).length!==1||slots[ch])return;
+  var s=slots[up];
+  if(!s||s.mirror)return;
+  setSlot(ch,s.src,s.type,s.hf,s.blf);slots[ch].mirror=true;
+ });
+}
 function renderSlots(){
+ applyLc();
  var box=$("slots");box.innerHTML="";var n=0;
  list().forEach(function(ch){
   var d=document.createElement("div"),s=slots[ch];d.className="slot"+(s?" ok":"");
@@ -401,7 +423,7 @@ $("imgs").onchange=function(e){
  fs.forEach(function(f){p=p.then(function(){return loadCanvas(f,900)}).then(function(c){
   var base=f.name.replace(/\.[^.]+$/,""),t=null;
   if(Array.from(base).length===1&&l.indexOf(base)>=0)t=base;
-  else for(var i=0;i<l.length;i++)if(!slots[l[i]]){t=l[i];break}
+  else for(var i=0;i<l.length;i++)if(!slots[l[i]]||slots[l[i]].mirror){t=l[i];break}
   if(t)setSlot(t,c,"img");
  })});
  p.then(renderSlots);
@@ -411,6 +433,53 @@ $("one").onchange=function(e){
  loadCanvas(f,900).then(function(c){setSlot(repCh,c,"img");renderSlots()});
 };
 
+/* vektorisasi */
+function otsu(l){
+ var h=new Array(256).fill(0),n=l.length,i,sum=0;
+ for(i=0;i<n;i++)h[l[i]|0]++;
+ for(i=0;i<256;i++)sum+=i*h[i];
+ var sB=0,wB=0,mx=0,t=128;
+ for(i=0;i<256;i++){wB+=h[i];if(!wB)continue;var wF=n-wB;if(!wF)break;sB+=i*h[i];
+  var mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;t=i}}
+ return t+1;
+}
+function trace(F,w,h){
+ var nxt=new Map(),wh=w*h;
+ function hk(x,y){return y*w+x}function vk(x,y){return wh+y*w+x}
+ for(var y=0;y<h-1;y++)for(var x=0;x<w-1;x++){
+  var i=(F[y*w+x]>0?1:0)|(F[y*w+x+1]>0?2:0)|(F[(y+1)*w+x+1]>0?4:0)|(F[(y+1)*w+x]>0?8:0);
+  if(i===0||i===15)continue;
+  var T=hk(x,y),B=hk(x,y+1),L=vk(x,y),R=vk(x+1,y);
+  switch(i){
+   case 1:nxt.set(L,T);break;case 2:nxt.set(T,R);break;case 4:nxt.set(R,B);break;case 8:nxt.set(B,L);break;
+   case 3:nxt.set(L,R);break;case 6:nxt.set(T,B);break;case 12:nxt.set(R,L);break;case 9:nxt.set(B,T);break;
+   case 7:nxt.set(L,B);break;case 11:nxt.set(B,R);break;case 13:nxt.set(R,T);break;case 14:nxt.set(T,L);break;
+   case 5:nxt.set(L,T);nxt.set(R,B);break;case 10:nxt.set(T,R);nxt.set(B,L);break;
+  }
+ }
+ function pos(k){
+  var a,x,y,v0,v1,t;
+  if(k<wh){y=Math.floor(k/w);x=k%w;v0=F[k];v1=F[k+1];t=v0/(v0-v1);return[x+t-.5,y-.5]}
+  a=k-wh;y=Math.floor(a/w);x=a%w;v0=F[a];v1=F[a+w];t=v0/(v0-v1);return[x-.5,y+t-.5];
+ }
+ var seen=new Set(),loops=[];
+ nxt.forEach(function(_,s){
+  if(seen.has(s))return;
+  var cur=s,pts=[],ok=false;
+  while(cur!==undefined&&!seen.has(cur)){seen.add(cur);pts.push(pos(cur));cur=nxt.get(cur)}
+  if(cur===s&&pts.length>3)loops.push(pts);
+ });
+ return loops;
+}
+function area(p){var a=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1]}return a/2}
+function simp(p,eps){
+ var n=p.length;if(n<6)return p;
+ var q=p.concat([p[0]]),keep=new Uint8Array(n+1),f=0,fd=0,i;
+ keep[0]=keep[n]=1;
+ for(i=1;i<n;i++){var dx=p[i][0]-p[0][0],dy=p[i][1]-p[0][1],dd=dx*dx+dy*dy;if(dd>fd){fd=dd;f=i}}
+ keep[f]=1;
+ function rec(a,b){
+  if(b<=a+1)return;
   var ax=q[a][0],ay=q[a][1],dx=q[b][0]-ax,dy=q[b][1]-ay,L=Math.sqrt(dx*dx+dy*dy)||1,m=-1,mi=-1;
   for(var j=a+1;j<b;j++){var d=Math.abs((q[j][0]-ax)*dy-(q[j][1]-ay)*dx)/L;if(d>m){m=d;mi=j}}
   if(m>eps){keep[mi]=1;rec(a,mi);rec(mi,b)}
@@ -557,7 +626,7 @@ function rebuild(manual){
    var items=[];
    list().forEach(function(ch){
     var s=slots[ch];if(!s)return;
-    var g=makeGlyph(s,off,sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
+    var g=makeGlyph(s,off,s.mirror?sc*(+$("lcs").value)/100:sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
    });
    if(!items.length){$("build").disabled=true;$("msg").textContent="Belum ada karakter terisi.";return}
    if(!items.some(function(g){return g.u===32}))items.push({u:32,adv:300,contours:[]});
@@ -628,8 +697,8 @@ $("cls").onclick=closeM;
 $("mdl").onclick=function(e){if(e.target===$("mdl"))closeM()};
 $("savep").onclick=function(){
  var s={},k;
- for(k in slots)s[k]={type:slots[k].type,hf:slots[k].hf,blf:slots[k].blf,data:slots[k].src.toDataURL("image/png")};
- var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,slots:s};
+ for(k in slots)if(!slots[k].mirror)s[k]={type:slots[k].type,hf:slots[k].hf,blf:slots[k].blf,data:slots[k].src.toDataURL("image/png")};
+ var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,lcm:$("lcm").checked,lcs:$("lcs").value,slots:s};
  save((names().fam.replace(/ /g,"")||"proyek")+"-proyek.json",new Blob([JSON.stringify(p)],{type:"application/json"}));
 };
 $("openp").onchange=function(e){
@@ -639,6 +708,7 @@ $("openp").onchange=function(e){
   try{
    var p=JSON.parse(r.result);
    ["chars","cols","fname","fdes","flic","th","sc","sb","bl"].forEach(function(k){if(p[k]!==undefined){$(k).value=p[k];if($(k+"v"))$(k+"v").textContent=p[k]}});
+   $("lcm").checked=!!p.lcm;if(p.lcs){$("lcs").value=p.lcs;$("lcsv").textContent=p.lcs}
    slots={};var pr=Promise.resolve();
    Object.keys(p.slots||{}).forEach(function(ch){pr=pr.then(function(){return new Promise(function(res){
     var im=new Image();
