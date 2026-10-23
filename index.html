@@ -3,23 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Font Studio: buat font sendiri dari tulisan tangan atau desain digital. Gratis, tepi huruf halus, hasil TTF dan WOFF siap dipakai di Canva, Word, dan Photoshop.">
+<meta name="description" content="Outdrofont: buat font sendiri dari tulisan tangan atau desain digital. Gratis, tepi huruf halus, hasil TTF dan WOFF siap dipakai di Canva, Word, dan Photoshop.">
 <meta name="keywords" content="pembuat font, buat font sendiri, font tulisan tangan, handwriting font, font generator, TTF, WOFF">
 <meta name="theme-color" content="#c2410c">
-<link rel="canonical" href="https://taknampak1706-byte.github.io/font-studio/">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Outdrofont">
+<link rel="canonical" href="https://taknampak1706-byte.github.io/OutDroFont/">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="id_ID">
-<meta property="og:url" content="https://taknampak1706-byte.github.io/font-studio/">
-<meta property="og:title" content="Font Studio: Buat Font Sendiri dari Gambar">
+<meta property="og:url" content="https://taknampak1706-byte.github.io/OutDroFont/">
+<meta property="og:title" content="Outdrofont: Buat Font Sendiri dari Gambar">
 <meta property="og:description" content="Ubah tulisan tangan atau desain digital menjadi file font TTF dan WOFF. Gratis dan berjalan di browser.">
-<meta property="og:image" content="https://taknampak1706-byte.github.io/font-studio/preview.png">
+<meta property="og:image" content="https://taknampak1706-byte.github.io/OutDroFont/preview.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://taknampak1706-byte.github.io/font-studio/preview.png">
+<meta name="twitter:image" content="https://taknampak1706-byte.github.io/OutDroFont/preview.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23c2410c'/%3E%3Ctext x='50' y='72' font-size='64' font-family='Georgia,serif' font-weight='bold' text-anchor='middle' fill='white'%3EAa%3C/text%3E%3C/svg%3E">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Font Studio","applicationCategory":"DesignApplication","operatingSystem":"Any","inLanguage":"id","url":"https://taknampak1706-byte.github.io/font-studio/","description":"Buat font sendiri dari tulisan tangan atau desain digital, hasil TTF dan WOFF.","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR"}}</script>
-<title>Font Studio: Buat Font dari Gambar</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Outdrofont","applicationCategory":"DesignApplication","operatingSystem":"Any","inLanguage":"id","url":"https://taknampak1706-byte.github.io/OutDroFont/","description":"Buat font sendiri dari tulisan tangan atau desain digital, hasil TTF dan WOFF.","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR"}}</script>
+<title>Outdrofont: Buat Font dari Gambar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <style>
@@ -67,7 +72,7 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 </head>
 <body>
 <main>
-<h1>Font Studio</h1>
+<h1>Outdrofont</h1>
 <p class="sub">Ubah tulisan tangan atau desain digital menjadi file font TTF dengan tepi huruf halus.</p>
 
 <section>
@@ -95,13 +100,6 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <label class="chk"><input type="checkbox" id="mg" checked><span>Gabungkan titik kecil ke huruf di bawahnya (i, j). Matikan bila lembar berisi tanda baca seperti . , ! ?</span></label>
 <label for="sens">Kepekaan deteksi tinta: <b id="sensv">62</b></label>
 <input id="sens" type="range" min="40" max="90" value="62">
-</div>
-<div id="lcOpt">
-<label class="chk"><input type="checkbox" id="lcm"><span>Pakai gambar huruf besar juga untuk huruf kecil (a-z otomatis sama dengan A-Z). Kotak huruf kecil yang sudah Anda isi sendiri tidak ditimpa.</span></label>
-<div id="lcSz" hidden>
-<label for="lcs">Ukuran huruf kecil dibanding huruf besar: <b id="lcsv">100</b>%</label>
-<input id="lcs" type="range" min="50" max="100" value="100">
-</div>
 </div>
 <label class="btn" for="sheet">Pilih foto lembar</label><input id="sheet" type="file" accept="image/*">
 <div class="msg" id="sres"></div>
@@ -187,9 +185,8 @@ function save(name,data){
  }
  downloads.save({filename:name,data:data}).catch(function(e){if(e&&e.code!=="declined")$("msg").textContent="Gagal menyimpan: "+(e.message||e.code)});
 }
-["th","sc","sb","bl","sens","lcs"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
-["th","sc","sb","fillc","lcs"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
-$("lcm").onchange=renderSlots;
+["th","sc","sb","bl","sens"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
+["th","sc","sb","fillc"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
 
 /* tab */
 $("tabA").onclick=function(){$("pA").hidden=false;$("pB").hidden=true;$("tabA").className="";$("tabB").className="alt"};
@@ -219,21 +216,7 @@ function loadCanvas(file,lim){return new Promise(function(res,rej){
 function thumb(c){var t=document.createElement("canvas"),h=80;t.width=Math.max(1,Math.round(h*c.width/c.height));t.height=h;
  var g=t.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,t.width,h);g.drawImage(c,0,0,t.width,h);return t.toDataURL("image/png")}
 function setSlot(ch,c,type,hf,blf){slots[ch]={src:c,type:type,url:thumb(c),hf:hf,blf:blf}}
-function applyLc(){
- var l=list(),k,on=$("lcm").checked;
- for(k in slots)if(slots[k].mirror)delete slots[k];
- $("lcSz").hidden=!on;
- if(!on)return;
- l.forEach(function(ch){
-  var up=ch.toUpperCase();
-  if(up===ch||Array.from(up).length!==1||slots[ch])return;
-  var s=slots[up];
-  if(!s||s.mirror)return;
-  setSlot(ch,s.src,s.type,s.hf,s.blf);slots[ch].mirror=true;
- });
-}
 function renderSlots(){
- applyLc();
  var box=$("slots");box.innerHTML="";var n=0;
  list().forEach(function(ch){
   var d=document.createElement("div"),s=slots[ch];d.className="slot"+(s?" ok":"");
@@ -423,7 +406,7 @@ $("imgs").onchange=function(e){
  fs.forEach(function(f){p=p.then(function(){return loadCanvas(f,900)}).then(function(c){
   var base=f.name.replace(/\.[^.]+$/,""),t=null;
   if(Array.from(base).length===1&&l.indexOf(base)>=0)t=base;
-  else for(var i=0;i<l.length;i++)if(!slots[l[i]]||slots[l[i]].mirror){t=l[i];break}
+  else for(var i=0;i<l.length;i++)if(!slots[l[i]]){t=l[i];break}
   if(t)setSlot(t,c,"img");
  })});
  p.then(renderSlots);
@@ -626,7 +609,7 @@ function rebuild(manual){
    var items=[];
    list().forEach(function(ch){
     var s=slots[ch];if(!s)return;
-    var g=makeGlyph(s,off,s.mirror?sc*(+$("lcs").value)/100:sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
+    var g=makeGlyph(s,off,sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
    });
    if(!items.length){$("build").disabled=true;$("msg").textContent="Belum ada karakter terisi.";return}
    if(!items.some(function(g){return g.u===32}))items.push({u:32,adv:300,contours:[]});
@@ -697,8 +680,8 @@ $("cls").onclick=closeM;
 $("mdl").onclick=function(e){if(e.target===$("mdl"))closeM()};
 $("savep").onclick=function(){
  var s={},k;
- for(k in slots)if(!slots[k].mirror)s[k]={type:slots[k].type,hf:slots[k].hf,blf:slots[k].blf,data:slots[k].src.toDataURL("image/png")};
- var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,lcm:$("lcm").checked,lcs:$("lcs").value,slots:s};
+ for(k in slots)s[k]={type:slots[k].type,hf:slots[k].hf,blf:slots[k].blf,data:slots[k].src.toDataURL("image/png")};
+ var p={v:1,chars:$("chars").value,cols:$("cols").value,fname:$("fname").value,fdes:$("fdes").value,flic:$("flic").value,th:$("th").value,sc:$("sc").value,sb:$("sb").value,bl:$("bl").value,slots:s};
  save((names().fam.replace(/ /g,"")||"proyek")+"-proyek.json",new Blob([JSON.stringify(p)],{type:"application/json"}));
 };
 $("openp").onchange=function(e){
@@ -708,7 +691,6 @@ $("openp").onchange=function(e){
   try{
    var p=JSON.parse(r.result);
    ["chars","cols","fname","fdes","flic","th","sc","sb","bl"].forEach(function(k){if(p[k]!==undefined){$(k).value=p[k];if($(k+"v"))$(k+"v").textContent=p[k]}});
-   $("lcm").checked=!!p.lcm;if(p.lcs){$("lcs").value=p.lcs;$("lcsv").textContent=p.lcs}
    slots={};var pr=Promise.resolve();
    Object.keys(p.slots||{}).forEach(function(ch){pr=pr.then(function(){return new Promise(function(res){
     var im=new Image();
@@ -735,5 +717,6 @@ $("dlz").onclick=function(){
 renderSlots();
 })();
 </script>
+<script>if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
 </body>
 </html>
