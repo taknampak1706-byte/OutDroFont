@@ -7,6 +7,7 @@
 <meta name="keywords" content="pembuat font, buat font sendiri, font tulisan tangan, handwriting font, font generator, TTF, WOFF">
 <meta name="theme-color" content="#c2410c">
 <link rel="manifest" href="manifest.webmanifest">
+<script>window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__bip=e})</script>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -74,6 +75,11 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <main>
 <h1>Outdrofont</h1>
 <p class="sub">Ubah tulisan tangan atau desain digital menjadi file font TTF dengan tepi huruf halus.</p>
+
+<section id="pwa" hidden>
+<button id="pwaBtn" style="margin-top:0" hidden>Pasang aplikasi Outdrofont</button>
+<div class="msg" id="pwaNote" style="margin-top:0"></div>
+</section>
 
 <section>
 <h2><span>1</span>Pilih karakter</h2>
@@ -715,6 +721,32 @@ $("dlz").onclick=function(){
  .catch(function(e){$("msg2").textContent="Gagal: "+e.message});
 };
 renderSlots();
+})();
+</script>
+<script>
+(function(){
+ var $=function(i){return document.getElementById(i)},box=$("pwa"),btn=$("pwaBtn"),note=$("pwaNote");
+ var sa=false;try{sa=matchMedia("(display-mode: standalone)").matches||navigator.standalone===true}catch(e){}
+ if(sa)return;
+ box.hidden=false;note.textContent="Memeriksa apakah bisa dipasang...";
+ var ev=window.__bip||null;
+ function ready(){btn.hidden=false;note.textContent="Siap dipasang. Ketuk tombol di atas."}
+ if(ev)ready();
+ window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();ev=e;ready()});
+ window.addEventListener("appinstalled",function(){box.hidden=true});
+ btn.onclick=function(){if(!ev)return;ev.prompt();ev.userChoice.then(function(){ev=null;btn.hidden=true},function(){})};
+ setTimeout(function(){
+  if(ev)return;
+  var ua=navigator.userAgent,isChrome=/Chrome\//.test(ua)&&!/(EdgA|OPR|SamsungBrowser|MiuiBrowser|UCBrowser|FBAN|FBAV|Instagram|; wv\))/.test(ua);
+  var r=["Browser: "+(isChrome?"Chrome":"bukan Chrome (buka lewat aplikasi Chrome)"),"HTTPS: "+(location.protocol==="https:"?"ya":"tidak")];
+  var mk=document.querySelector("link[rel=manifest]");
+  var p1=mk?fetch(mk.href).then(function(x){return "manifest: "+(x.ok?"terbaca":"gagal ("+x.status+")")}).catch(function(){return "manifest: gagal dibaca"}):Promise.resolve("manifest: tidak ada");
+  var p2=("serviceWorker" in navigator)?navigator.serviceWorker.getRegistration().then(function(g){return "service worker: "+(g&&g.active?"aktif":g?"belum aktif":"belum terdaftar")}).catch(function(){return "service worker: galat"}):Promise.resolve("service worker: tidak didukung");
+  Promise.all([p1,p2]).then(function(x){
+   if(ev)return;
+   note.textContent=r.concat(x).join(" | ")+". Chrome belum menawarkan pemasangan. Coba menu ⋮ lalu Tambahkan ke layar utama, atau muat ulang halaman ini.";
+  });
+ },4000);
 })();
 </script>
 <script>if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
