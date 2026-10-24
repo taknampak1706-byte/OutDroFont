@@ -63,7 +63,7 @@ canvas{max-width:100%;height:auto;border:1px solid var(--bd);border-radius:8px;m
 ol,ul{margin:6px 0 0;padding-left:20px;color:var(--mut);font-size:14px}
 select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
 .chk{display:flex;gap:8px;align-items:flex-start;color:var(--tx);margin-top:12px}.chk input{margin-top:4px;flex:none}
-#det{display:block;margin-left:auto;margin-right:auto}
+#det{display:block;margin-left:auto;margin-right:auto;touch-action:pan-y}
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;overflow:auto;padding:16px;display:flex}
 .box{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;max-width:720px;width:100%;margin:auto}
 #spec{width:100%}
@@ -101,9 +101,14 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <div id="pA">
 <p class="msg">Foto atau scan lembar berisi huruf-huruf. Aplikasi mendeteksi tiap huruf, memisahkannya satu per satu, lalu mengisi kotak karakter di bawah secara berurutan (kiri ke kanan, atas ke bawah) tanpa terpotong.</p>
 <label for="smode">Cara memisahkan huruf</label>
-<select id="smode"><option value="auto">Otomatis: deteksi tiap huruf (disarankan)</option><option value="grid">Per kotak template (untuk lembar dari tombol Unduh template)</option></select>
+<select id="smode"><option value="auto">Otomatis: deteksi tiap huruf (disarankan)</option><option value="guided">Terpandu: huruf padat atau menempel (poster, graffiti)</option><option value="grid">Per kotak template (untuk lembar dari tombol Unduh template)</option></select>
+<div id="guidedOpt" hidden>
+<label for="lay">Jumlah huruf per baris, dari baris paling atas</label>
+<input id="lay" type="text" inputmode="numeric" placeholder="Contoh: 5,5,5,5,6">
+<div class="msg">Isi sesuai susunan di gambar. Contoh poster A sampai Z dengan baris ABCDE, FGHIJ, KLMNO, PQRST, UVWXYZ ditulis 5,5,5,5,6. Karakter di langkah 1 harus huruf yang sama dan berurutan seperti di gambar. Kolom ini boleh dikosongkan, nanti ditebak otomatis. Setelah terpotong, geser lingkaran oranye pada gambar hasil untuk memperbaiki garis potong. Untuk huruf berbingkai, centang "Isi bagian dalam huruf" di langkah 3.</div>
+</div>
 <div id="autoOpt">
-<label class="chk"><input type="checkbox" id="mg" checked><span>Gabungkan titik kecil ke huruf di bawahnya (i, j). Matikan bila lembar berisi tanda baca seperti . , ! ?</span></label>
+<label class="chk" id="mgrow"><input type="checkbox" id="mg" checked><span>Gabungkan titik kecil ke huruf di bawahnya (i, j). Matikan bila lembar berisi tanda baca seperti . , ! ?</span></label>
 <label for="sens">Kepekaan deteksi tinta: <b id="sensv">62</b></label>
 <input id="sens" type="range" min="40" max="90" value="62">
 </div>
@@ -377,16 +382,311 @@ function drawDet(im,res){
  });
  g.setLineDash([]);cv.hidden=false;
 }
+/* ===== mode terpandu: huruf padat atau menempel ===== */
+var guide=null,gdrag=null;
+function parseLayout(t){return String(t||"").split(/[^0-9]+/).filter(Boolean).map(Number).filter(function(n){return n>0&&n<=60}).slice(0,24)}
+function smoothA(a,r){
+ var n=a.length,o=new Float32Array(n),p=new Float64Array(n+1),i;
+ for(i=0;i<n;i++)p[i+1]=p[i]+a[i];
+ for(i=0;i<n;i++){var lo=Math.max(0,i-r),hi=Math.min(n,i+r+1);o[i]=(p[hi]-p[lo])/(hi-lo)}
+ return o;
+}
+function med(a){var b=a.slice().sort(function(x,y){return x-y});return b.length?b[b.length>>1]:0}
+function inkMap(im,ratio){
+ var W=im.width,H=im.height,n=W*H,px=im.getContext("2d").getImageData(0,0,W,H).data,i,x,y;
+ var lum=new Uint8ClampedArray(n);
+ for(i=0;i<n;i++)lum[i]=.299*px[i*4]+.587*px[i*4+1]+.114*px[i*4+2];
+ var r=(Math.max(31,Math.round(Math.min(W,H)/8))|1)>>1,W1=W+1,ii=new Uint32Array(W1*(H+1));
+ for(y=0;y<H;y++){var rs=0;for(x=0;x<W;x++){rs+=lum[y*W+x];ii[(y+1)*W1+x+1]=ii[y*W1+x+1]+rs}}
+ var ink=new Uint8Array(n);
+ for(y=0;y<H;y++){var ya=Math.max(0,y-r),yb=Math.min(H,y+r+1);
+  for(x=0;x<W;x++){var xa=Math.max(0,x-r),xb=Math.min(W,x+r+1),v=lum[y*W+x];
+   if(v>=200)continue;
+   var m=(ii[yb*W1+xb]-ii[ya*W1+xb]-ii[yb*W1+xa]+ii[ya*W1+xa])/((xb-xa)*(yb-ya));
+   if(v<m*ratio)ink[y*W+x]=1}}
+ return{W:W,H:H,px:px,ink:ink};
+}
+function rowProfile(info){
+ var W=info.W,H=info.H,ink=info.ink,p=new Float32Array(H),x,y;
+ for(y=0;y<H;y++){var s=0;for(x=0;x<W;x++)s+=ink[y*W+x];p[y]=s}
+ return p;
+}
+function guessLayout(rowP,total){
+ var H=rowP.length,sm=smoothA(rowP,Math.max(2,Math.round(H/150))),mx=0,i,l;
+ for(i=0;i<H;i++)if(sm[i]>mx)mx=sm[i];
+ var lo=0,hi=H-1;
+ while(lo<H&&sm[lo]<.12*mx)lo++;
+ while(hi>lo&&sm[hi]<.12*mx)hi--;
+ var span=hi-lo+1,mean=0,ac0=0,R=1;
+ for(i=lo;i<=hi;i++)mean+=sm[i];
+ mean/=span;
+ for(i=lo;i<=hi;i++)ac0+=(sm[i]-mean)*(sm[i]-mean);
+ var lmin=Math.max(8,Math.round(span/14)),lmax=Math.round(span/1.6),ac=[],am=-1,bl=0;
+ if(ac0>0)for(l=lmin;l<=lmax;l++){
+  var a=0;for(i=lo;i+l<=hi;i++)a+=(sm[i]-mean)*(sm[i+l]-mean);
+  ac[l]=a/(ac0*(span-l)/span);if(ac[l]>am){am=ac[l];bl=l}
+ }
+ if(am>.12){
+  for(;;){
+   var h=Math.round(bl/2),hb=-1,hl=0;
+   if(h<lmin)break;
+   for(l=Math.max(lmin,h-4);l<=Math.min(lmax,h+4);l++)if(ac[l]>hb){hb=ac[l];hl=l}
+   if(hb>=.45*am&&hl>0){bl=hl;am=Math.max(am,hb)}else break;
+  }
+  R=Math.round(span/bl);
+ }
+ R=Math.max(1,Math.min(12,R));
+ var base=Math.floor(total/R),extra=total%R,out=[],k;
+ for(k=0;k<R;k++)out.push(base+(k>=R-extra?1:0));
+ return out;
+}
+/* pilih K-1 garis potong dengan pencarian optimal: lembah tinta dalam + lebar segmen mendekati rata-rata */
+function pickCuts(P,lo,hi,K,sigma,beta){
+ if(K<2)return [];
+ var span=hi-lo,i,k,r,u,tot=0;
+ for(i=lo;i<hi;i++)tot+=P[i];
+ if(tot<=0||span<K*3)return [];
+ var avg=span/K,mean=tot/span,umin=Math.max(2,Math.round(.35*avg)),umax=Math.max(umin+1,Math.round(2.2*avg)),INF=1e18;
+ function seg(w){var z=Math.log(w/avg);return z*z/(2*sigma*sigma)}
+ var dp=[],bk=[];
+ for(k=0;k<K-1;k++){dp.push(new Float64Array(span+1).fill(INF));bk.push(new Int32Array(span+1).fill(-1))}
+ for(k=0;k<K-1;k++){
+  for(r=umin;r<=span-umin;r++){
+   var v=beta*P[lo+r]/mean;
+   if(k===0){if(r<=umax){dp[0][r]=seg(r)+v}continue}
+   var best=INF,bi=-1;
+   for(u=umin;u<=umax&&u<=r;u++){
+    var c=dp[k-1][r-u];
+    if(c>=INF)continue;
+    c+=seg(u);
+    if(c<best){best=c;bi=r-u}
+   }
+   if(bi>=0){dp[k][r]=best+v;bk[k][r]=bi}
+  }
+ }
+ var fb=INF,fr=-1;
+ for(r=umin;r<=span-umin;r++){
+  if(dp[K-2][r]>=INF)continue;
+  var w=span-r;if(w>umax)continue;
+  var c2=dp[K-2][r]+seg(w);
+  if(c2<fb){fb=c2;fr=r}
+ }
+ var out=new Array(K-1);
+ if(fr<0){for(k=0;k<K-1;k++)out[k]=Math.round(lo+(k+1)*avg);return out}
+ for(k=K-2;k>=0;k--){out[k]=lo+fr;fr=bk[k][fr]}
+ return out;
+}
+function extent(P,thr){
+ var n=P.length,mx=0,i;
+ for(i=0;i<n;i++)if(P[i]>mx)mx=P[i];
+ var a=0,b=n-1;
+ if(mx<=0)return[0,n-1];
+ while(a<n&&P[a]<thr*mx)a++;
+ while(b>a&&P[b]<thr*mx)b--;
+ return[a,b];
+}
+function bestSlant(info,y0,y1){
+ var W=info.W,ink=info.ink,ym=(y0+y1)/2,best=0,bs=-1,s,x,y,i,off=Math.ceil(.7*(y1-y0)/2)+3;
+ for(s=-.7;s<=.7001;s+=.05){
+  var bins=new Float32Array(W+2*off+2),sq=0;
+  for(y=y0;y<y1;y+=2){var sh=s*(y-ym);for(x=0;x<W;x++)if(ink[y*W+x])bins[Math.round(x-sh)+off]++}
+  for(i=1;i<bins.length-1;i++){var v=(bins[i-1]+bins[i]+bins[i+1])/3;sq+=v*v}
+  if(sq>bs){bs=sq;best=s}
+ }
+ return best;
+}
+function buildGuide(info,lay){
+ var W=info.W,H=info.H,ink=info.ink,x,y,K=lay.length,rowP=rowProfile(info),mxr=0;
+ for(y=0;y<H;y++)if(rowP[y]>mxr)mxr=rowP[y];
+ if(mxr<=0)return null;
+ var rs=smoothA(rowP,Math.max(2,Math.round(H/150))),ex=extent(rs,.12),ylo=ex[0],yhi=ex[1];
+ var rr=Math.max(2,Math.round((yhi-ylo)/K*.04));
+ var rc=pickCuts(smoothA(rowP,rr),ylo,yhi+1,K,.3,1.5);
+ var bnd=[ylo].concat(rc,[yhi+1]),rows=[],r,sl=[];
+ for(r=0;r<K;r++)sl.push(bestSlant(info,bnd[r],bnd[r+1]));
+ var s=med(sl);
+ for(r=0;r<K;r++){
+  var y0=bnd[r],y1=bnd[r+1],ym=(y0+y1)/2,off=Math.ceil(Math.abs(s)*(y1-y0)/2)+3,colP=new Float32Array(W+2*off+2);
+  for(y=y0;y<y1;y++){var sh=s*(y-ym);for(x=0;x<W;x++)if(ink[y*W+x])colP[Math.round(x-sh)+off]++}
+  var cs0=smoothA(colP,Math.max(2,Math.round(W/150))),ex2=extent(cs0,.06),xl=ex2[0],xr=ex2[1],n=lay[r];
+  var cr=Math.max(2,Math.round((xr-xl)/n*.04));
+  rows.push({y0:y0,y1:y1,ym:ym,off:off,s:s,xl:xl,xr:xr,cuts:pickCuts(smoothA(colP,cr),xl,xr+1,n,.4,1.5)});
+ }
+ return{rows:rows,slant:s};
+}
+/* luruskan gambar yang miring (baris naik atau turun) */
+function skewAngle(im){
+ var s=Math.min(1,500/Math.max(im.width,im.height)),c=document.createElement("canvas");
+ c.width=Math.max(8,Math.round(im.width*s));c.height=Math.max(8,Math.round(im.height*s));
+ c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+ var info=inkMap(c,(+$("sens").value)/100),W=info.W,H=info.H,ink=info.ink,pts=[],i,j,a;
+ for(i=0;i<W*H;i++)if(ink[i])pts.push(i);
+ if(pts.length<50)return 0;
+ var cx=W/2,cy=H/2,best=0,bs=-1,off=W+H;
+ for(a=-14;a<=14;a+=.5){
+  var t=a*Math.PI/180,sn=Math.sin(t),cs=Math.cos(t),bins=new Float32Array(2*(W+H)+4),sq=0;
+  for(j=0;j<pts.length;j++){var p=pts[j],px0=p%W-cx,py0=((p/W)|0)-cy;bins[Math.round(py0*cs-px0*sn)+off]++}
+  for(j=0;j<bins.length;j++)sq+=bins[j]*bins[j];
+  if(sq>bs){bs=sq;best=a}
+ }
+ return best;
+}
+function rotateSheet(im,deg){
+ var t=deg*Math.PI/180,cs=Math.abs(Math.cos(t)),sn=Math.abs(Math.sin(t));
+ var nw=Math.ceil(im.width*cs+im.height*sn),nh=Math.ceil(im.width*sn+im.height*cs),c=document.createElement("canvas");
+ c.width=nw;c.height=nh;
+ var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,nw,nh);
+ g.translate(nw/2,nh/2);g.rotate(-t);g.drawImage(im,-im.width/2,-im.height/2);
+ return c;
+}
+/* potong satu sel (batas kiri dan kanan bisa miring): buang serpihan huruf tetangga dan percikan kecil */
+function cropCell(info,rw,u0,u1){
+ var W=info.W,ink=info.ink,px=info.px,y0=rw.y0,y1=rw.y1,ch=y1-y0,s=rw.s,ym=rw.ym,off=rw.off,i,x,y;
+ function inCell(gx,gy){if(gy<y0||gy>=y1||gx<0||gx>=W)return false;var u=Math.round(gx-s*(gy-ym))+off;return u>=u0&&u<u1}
+ var xa=Math.floor(Math.min(u0-off+s*(y0-ym),u0-off+s*(y1-ym))),xb=Math.ceil(Math.max(u1-off+s*(y0-ym),u1-off+s*(y1-ym)));
+ xa=Math.max(0,xa);xb=Math.min(W,xb);
+ var cw=xb-xa;
+ if(cw<3||ch<3)return null;
+ var n=cw*ch,m=new Uint8Array(n),any=0;
+ for(y=0;y<ch;y++)for(x=0;x<cw;x++){var gx=xa+x,gy=y0+y;if(ink[gy*W+gx]&&inCell(gx,gy)){m[y*cw+x]=1;any++}}
+ if(!any)return null;
+ var lab=new Int32Array(n),st=new Int32Array(n),areas=[0],edge=[0],nl=0,maxA=0;
+ for(i=0;i<n;i++){
+  if(!m[i]||lab[i])continue;
+  nl++;var sp=0,ar=0,ed=0;st[sp++]=i;lab[i]=nl;
+  while(sp){
+   var p=st[--sp],cx=p%cw,cy=(p-cx)/cw,gx2=xa+cx,gy2=y0+cy;ar++;
+   if(!inCell(gx2-1,gy2)||!inCell(gx2+1,gy2)||!inCell(gx2,gy2-1)||!inCell(gx2,gy2+1))ed=1;
+   for(var dy=-1;dy<=1;dy++){var ny=cy+dy;if(ny<0||ny>=ch)continue;
+    for(var dx=-1;dx<=1;dx++){var nx=cx+dx;if(nx<0||nx>=cw)continue;var q=ny*cw+nx;if(m[q]&&!lab[q]){lab[q]=nl;st[sp++]=q}}}
+  }
+  areas.push(ar);edge.push(ed);if(ar>maxA)maxA=ar;
+ }
+ var minA=Math.max(8,Math.round(.0015*n)),keep=new Uint8Array(nl+1);
+ for(i=1;i<=nl;i++)keep[i]=(areas[i]>=minA&&!(edge[i]&&areas[i]<.06*maxA))?1:0;
+ var pad=Math.max(4,Math.round(.07*ch)),cv=document.createElement("canvas");
+ cv.width=cw+2*pad;cv.height=ch+2*pad;
+ var cg=cv.getContext("2d");cg.fillStyle="#fff";cg.fillRect(0,0,cv.width,cv.height);
+ var id=cg.createImageData(cw,ch),d=id.data,top=ch,bot=-1;
+ for(i=0;i<d.length;i++)d[i]=255;
+ for(y=0;y<ch;y++)for(x=0;x<cw;x++){
+  var l=lab[y*cw+x];
+  if(l&&keep[l]){var si=((y0+y)*W+xa+x)*4,di=(y*cw+x)*4;d[di]=px[si];d[di+1]=px[si+1];d[di+2]=px[si+2];if(y<top)top=y;if(y>bot)bot=y}
+ }
+ if(bot<0)return null;
+ cg.putImageData(id,pad,pad);
+ return{cv:cv,pad:pad,h:bot-top+1,bottom:bot+1};
+}
+function guideApply(info,gd){
+ var l=list(),k=0,filled=0;
+ slots={};
+ gd.rows.forEach(function(rw){
+  var n=rw.cuts.length+1,cells=[],j;
+  for(j=0;j<n;j++){
+   var u0=j?rw.cuts[j-1]:rw.xl,u1=j<n-1?rw.cuts[j]:rw.xr+1;
+   cells.push(cropCell(info,rw,u0,u1));
+  }
+  var hs=[],bs=[];
+  cells.forEach(function(c){if(c){hs.push(c.h);bs.push(c.bottom)}});
+  var ref=med(hs),base=med(bs);
+  cells.forEach(function(c){
+   var idx=k++;
+   if(!c||idx>=l.length)return;
+   var Hc=c.cv.height;
+   setSlot(l[idx],c.cv,"auto",ref/Hc,(c.pad+base)/Hc);
+   filled++;
+  });
+ });
+ return filled;
+}
+function drawGuide(){
+ var gi=guide,info=gi.info,cv=$("det"),k=Math.min(1,900/info.W),l=list(),idx=0;
+ gi.k=k;
+ cv.width=Math.round(info.W*k);cv.height=Math.round(info.H*k);
+ var g=cv.getContext("2d");g.drawImage(gi.img,0,0,cv.width,cv.height);
+ g.font="bold 14px sans-serif";g.textBaseline="top";
+ gi.gd.rows.forEach(function(rw){
+  var ys=rw.y0*k,ye=rw.y1*k,n=rw.cuts.length+1,j,s=rw.s;
+  function X(u,y){return (u-rw.off+s*(y-rw.ym))*k}
+  g.setLineDash([6,5]);g.lineWidth=1;g.strokeStyle="#2563eb";
+  g.beginPath();g.moveTo(X(rw.xl,rw.y0),ys);g.lineTo(X(rw.xr+1,rw.y0),ys);g.moveTo(X(rw.xl,rw.y1),ye);g.lineTo(X(rw.xr+1,rw.y1),ye);g.stroke();
+  g.setLineDash([]);
+  for(j=0;j<n;j++){
+   var x0=X(j?rw.cuts[j-1]:rw.xl,rw.y0);
+   if(idx<l.length){var t=l[idx],tw=g.measureText(t).width+8;g.fillStyle="#c2410c";g.fillRect(x0+2,ys+2,tw,18);g.fillStyle="#fff";g.fillText(t,x0+6,ys+4)}
+   idx++;
+  }
+  g.lineWidth=2;g.strokeStyle="#c2410c";
+  rw.cuts.forEach(function(c){
+   var mx=X(c,rw.ym),my=rw.ym*k;
+   g.beginPath();g.moveTo(X(c,rw.y0),ys);g.lineTo(X(c,rw.y1),ye);g.stroke();
+   g.fillStyle="#c2410c";g.beginPath();g.arc(mx,my,11,0,6.2832);g.fill();
+   g.fillStyle="#fff";g.fillText("↔",mx-7,my-7);
+  });
+ });
+ cv.hidden=false;
+}
+function runGuided(){
+ var l=list();
+ $("sres").textContent="Menganalisis tata letak...";
+ setTimeout(function(){
+  var info,lay,guessed=false,gd,cnt,ang=0,img=null;
+  try{
+   ang=skewAngle(lastSheet);img=Math.abs(ang)>=1?rotateSheet(lastSheet,ang):lastSheet;
+   info=inkMap(img,(+$("sens").value)/100);
+   lay=parseLayout($("lay").value);
+   if(!lay.length){lay=guessLayout(rowProfile(info),l.length);$("lay").value=lay.join(",");guessed=true}
+   gd=buildGuide(info,lay);
+   if(!gd){$("sres").textContent="Tidak ada tulisan terdeteksi. Pastikan huruf gelap di atas latar terang, lalu coba naikkan kepekaan.";renderSlots();return}
+   guide={info:info,gd:gd,k:1,img:img};
+   cnt=guideApply(info,gd);
+   drawGuide();
+  }catch(e){$("sres").textContent="Gagal memotong: "+e.message;renderSlots();return}
+  var tot=lay.reduce(function(a,b){return a+b},0);
+  var m=tot+" huruf dalam "+lay.length+" baris, "+cnt+" kotak terisi.";
+  if(Math.abs(ang)>=1)m+=" Gambar diluruskan "+Math.abs(ang).toFixed(1)+" derajat.";
+  if(Math.abs(gd.slant)>=.1)m+=" Garis potong dimiringkan "+Math.round(Math.atan(Math.abs(gd.slant))*180/Math.PI)+" derajat mengikuti huruf.";
+  if(guessed)m+=" Susunan baris ditebak otomatis ("+lay.join(",")+"). Ubah kolom jumlah huruf per baris bila tidak cocok.";
+  if(tot!==l.length)m+=" Perhatian: total di susunan baris ("+tot+") berbeda dengan jumlah karakter di langkah 1 ("+l.length+").";
+  m+=" Geser lingkaran oranye pada gambar untuk memperbaiki garis potong.";
+  $("sres").textContent=m;
+  renderSlots();
+ },30);
+}
+(function(){
+ var cv=$("det");
+ function pos(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}}
+ cv.addEventListener("pointerdown",function(e){
+  if(!guide||$("smode").value!=="guided")return;
+  var p=pos(e),k=guide.k,best=null,bd=22;
+  guide.gd.rows.forEach(function(rw,ri){
+   if(p.y<rw.y0*k-10||p.y>rw.y1*k+10)return;
+   rw.cuts.forEach(function(c,ci){var d=Math.abs(p.x-(c-rw.off+rw.s*(p.y/k-rw.ym))*k);if(d<bd){bd=d;best={r:ri,c:ci}}});
+  });
+  if(best){gdrag=best;try{cv.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault()}
+ });
+ cv.addEventListener("pointermove",function(e){
+  if(!gdrag)return;
+  var rw=guide.gd.rows[gdrag.r],cs=rw.cuts,i=gdrag.c,p=pos(e),k=guide.k;
+  var mn=Math.max(3,Math.round(.15*(rw.xr-rw.xl)/(cs.length+1)));
+  var lo=(i?cs[i-1]:rw.xl)+mn,hi=(i<cs.length-1?cs[i+1]:rw.xr+1)-mn;
+  cs[i]=Math.round(Math.min(hi,Math.max(lo,p.x/k-rw.s*(p.y/k-rw.ym)+rw.off)));
+  drawGuide();e.preventDefault();
+ });
+ function end(){if(!gdrag)return;gdrag=null;guideApply(guide.info,guide.gd);renderSlots()}
+ cv.addEventListener("pointerup",end);cv.addEventListener("pointercancel",end);
+})();
 function runSheet(){
  if(!lastSheet)return;
- slots={};$("det").hidden=true;
+ slots={};guide=null;$("det").hidden=true;
+ if($("smode").value==="guided"){runGuided();return}
  if($("smode").value==="grid"){gridSplit(lastSheet);$("sres").textContent="Dipotong sesuai kotak template ("+cols()+" kolom).";renderSlots();return}
  $("sres").textContent="Mendeteksi huruf...";
  setTimeout(function(){
   var res;
   try{res=autoSplit(lastSheet)}catch(e){$("sres").textContent="Gagal mendeteksi: "+e.message;renderSlots();return}
   var l=list();
-  if(!res.count){$("sres").textContent=res.noisy?"Gambar terlalu berisik. Pakai foto yang lebih bersih atau turunkan kepekaan.":"Tidak ada huruf terdeteksi. Pastikan tulisan gelap di atas kertas terang, lalu coba naikkan kepekaan.";renderSlots();return}
+  if(!res.count){$("sres").textContent=res.noisy?"Gambar terlalu berisik. Pakai foto yang lebih bersih, turunkan kepekaan, atau coba mode Terpandu.":"Tidak ada huruf terdeteksi. Pastikan tulisan gelap di atas kertas terang, lalu coba naikkan kepekaan.";renderSlots();return}
   res.seq.slice(0,l.length).forEach(function(s,i){setSlot(l[i],res.crops[i],"auto",res.hf,res.blf)});
   drawDet(lastSheet,res);
   var f=Math.min(res.count,l.length),msg=res.count+" huruf terdeteksi, "+f+" kotak terisi";
@@ -394,6 +694,7 @@ function runSheet(){
   msg+=".";
   if(res.count>l.length)msg+=" "+(res.count-l.length)+" huruf sisa diabaikan (kotak merah putus-putus). Tambah karakter di langkah 1 bila perlu.";
   else if(res.count<l.length)msg+=" Sisa kotak dibiarkan kosong. Urutan huruf mengikuti daftar karakter di langkah 1.";
+  if(res.count>1.4*l.length||res.count<.6*l.length)msg+=" Hasil ini kemungkinan kacau karena huruf menempel atau gambar terlalu padat. Ganti cara memisahkan ke mode Terpandu di atas.";
   $("sres").textContent=msg;
   renderSlots();
  },30);
@@ -403,8 +704,9 @@ $("sheet").onchange=function(e){
  $("sres").textContent="Membaca gambar...";
  loadCanvas(f,2400).then(function(im){lastSheet=im;runSheet()}).catch(function(){$("sres").textContent="Gambar tidak bisa dibaca."});
 };
-$("smode").onchange=function(){$("autoOpt").hidden=$("smode").value==="grid";runSheet()};
+$("smode").onchange=function(){var v=$("smode").value;$("autoOpt").hidden=v==="grid";$("mgrow").hidden=v!=="auto";$("guidedOpt").hidden=v!=="guided";runSheet()};
 $("mg").onchange=runSheet;
+$("lay").onchange=runSheet;
 $("sens").onchange=runSheet;
 $("imgs").onchange=function(e){
  var fs=Array.from(e.target.files).sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
