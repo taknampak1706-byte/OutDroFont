@@ -70,6 +70,11 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 .box{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;max-width:720px;width:100%;margin:auto}
 #spec{width:100%}
 .pbar{display:flex;gap:10px;align-items:center}.pbar b{min-width:2.5em;text-align:right;color:var(--mut);font-weight:600}
+.vw{overflow:auto;max-height:70vh;border:1px solid var(--bd);border-radius:8px;margin-top:10px;background:#fff;-webkit-overflow-scrolling:touch}
+.vw canvas{max-width:none;margin:0;border:0;border-radius:0;display:block}
+#detbox:has(#det[hidden]){display:none}
+.tb{display:flex;flex-wrap:wrap;gap:6px}
+.tb button{width:auto;flex:1 1 28%;margin-top:6px;padding:10px 6px;font-size:14px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -122,9 +127,20 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 </div>
 <label class="btn" for="sheet">Pilih foto lembar</label><input id="sheet" type="file" accept="image/*">
 <div class="msg" id="sres"></div>
-<canvas id="det" hidden></canvas>
+<div id="detbox">
+<div class="vw" id="detw"><canvas id="det" hidden></canvas></div>
+<div class="tb"><button class="alt" id="dz_in">Perbesar +</button><button class="alt" id="dz_out">Perkecil -</button><button class="alt" id="dz_fit">Pas layar</button></div>
+<div class="msg">Zoom: cubit dengan dua jari atau pakai tombol di atas. Geser gambar dengan satu jari di area kosong.</div>
+</div>
 <button class="alt" id="edtog" hidden>Atur kotak deteksi: mati</button>
-<div class="msg" id="edhint" hidden>Ketuk kotak untuk memilihnya. Seret kotak untuk memindah, atau seret persegi kecil di sudut kanan bawah untuk mengubah ukuran. Hasil di bawah ikut berubah. Matikan mode ini untuk menggulir halaman lewat gambar.</div>
+<div class="tb" id="edtb" hidden>
+<button class="alt" id="ed_add">Tambah kotak</button>
+<button class="alt" id="ed_del">Hapus kotak ini</button>
+<button class="alt" id="ed_clr">Hapus kotak tanpa huruf</button>
+<button class="alt" id="ed_undo">Urungkan</button>
+</div>
+<div class="msg" id="edmsg" hidden></div>
+<div class="msg" id="edhint" hidden>Ketuk kotak untuk memilihnya. Seret kotak untuk memindah, atau seret persegi biru di sudut kanan bawah untuk mengubah ukuran. "Tambah kotak" membuat kotak baru seukuran kotak lain di tengah layar. "Hapus kotak tanpa huruf" membersihkan kotak merah putus-putus. Salah langkah? Tekan Urungkan. Hasil di bawah ikut berubah.</div>
 </div>
 <div id="pB" hidden>
 <p class="msg">Pilih banyak gambar sekaligus (PNG, JPG). Beri nama file sesuai karakter, misalnya A.png atau b.png. File lain mengisi kotak kosong secara berurutan. Satu gambar sebaiknya satu karakter, ukuran bingkai sama, dengan huruf berdiri di garis dasar yang sama.</p>
@@ -181,8 +197,10 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <div class="ov" id="pk" hidden>
 <div class="box">
 <h2 id="pkt">Pilih gambar huruf</h2>
-<div class="msg">Ketuk kotak pada gambar untuk memakainya. Bila hurufnya belum punya kotak, seret jari di sekitar huruf untuk menggambar kotak sendiri.</div>
-<div class="scroll"><canvas id="pkc" style="touch-action:none;display:block;margin:10px auto 0"></canvas></div>
+<div class="msg">Ketuk kotak merah untuk memakainya. Ketuk area kosong di sekitar huruf untuk membuat kotak baru seukuran kotak lain. Geser dengan satu jari, zoom dengan cubit atau tombol. Mau ukuran kotak bebas? Nyalakan "Gambar kotak sendiri" lalu seret di sekitar huruf.</div>
+<div class="vw" id="pkw" style="max-height:60vh"><canvas id="pkc" style="touch-action:none"></canvas></div>
+<div class="tb"><button class="alt" id="pz_in">+</button><button class="alt" id="pz_out">-</button><button class="alt" id="pz_fit">Pas</button><button class="alt" id="pk_draw">Gambar kotak sendiri: mati</button><button class="alt" id="pk_undo">Urungkan</button></div>
+<div class="msg" id="pkm"></div>
 <button class="alt" id="pkg">Pilih gambar dari galeri</button>
 <button class="alt" id="pkx">Batal</button>
 </div>
@@ -203,7 +221,7 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <script>
 (function(){
 var $=function(i){return document.getElementById(i)};
-var CELL=200,M=.03,slots={},fontBuf=null,downloads=null,repCh=null,lastSheet=null,curChars="",bt=null,det=null,sel=-1,editOn=false,bdrag=null;
+var CELL=200,M=.03,slots={},fontBuf=null,downloads=null,repCh=null,lastSheet=null,curChars="",bt=null,det=null,sel=-1,editOn=false,bdrag=null,dv=null,pv=null;
 try{claude.use("downloads").then(function(d){downloads=d})}catch(e){}
 
 function list(){return Array.from(new Set(Array.from($("chars").value.replace(/\s/g,"")))).filter(function(c){return c.codePointAt(0)<65536})}
@@ -691,42 +709,126 @@ function commitDet(img,cells,pairs,lowF,noDraw){
   c.ch=ch;c.low=lw;setSlot(ch,c.cv,"auto",c.hf,c.blf);slots[ch].low=lw;used[ch]=1;
   if(lw)lowL.push(ch);
  });
- det={img:img,cells:cells,k:1};sel=-1;
+ det={img:img,cells:cells,k:1,undo:[]};sel=-1;
  if(!noDraw)drawDet2();
  return{used:used,lowL:lowL};
 }
+function scOf(cv){var r=cv.getBoundingClientRect();return r.width>0?clamp(cv.width/r.width,.3,6):1}
+/* penampil gambar dengan zoom (tombol, cubit, roda) dan geser satu jari */
+function Gest(cv,wrap,h){
+ var ptr={},pin=null,pan=null,claimed=false,moved=false,g={z:1};
+ function base(){return Math.max(60,Math.min(wrap.clientWidth,cv.width))}
+ g.pos=function(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+ g.apply=function(){cv.style.width=Math.round(base()*g.z)+"px";cv.style.touchAction=h.ta?h.ta(g.z):"none"};
+ g.zoom=function(z,cx,cy){
+  z=clamp(z,1,8);
+  var r=wrap.getBoundingClientRect(),w0=cv.offsetWidth||1,h0=cv.offsetHeight||1,fx=(wrap.scrollLeft+cx-r.left)/w0,fy=(wrap.scrollTop+cy-r.top)/h0;
+  g.z=z;g.apply();
+  wrap.scrollLeft=fx*cv.offsetWidth-(cx-r.left);wrap.scrollTop=fy*cv.offsetHeight-(cy-r.top);
+  if(h.redraw)h.redraw();
+ };
+ g.fit=function(){g.z=1;g.apply();wrap.scrollLeft=0;wrap.scrollTop=0;if(h.redraw)h.redraw()};
+ g.center=function(){var r=wrap.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}};
+ function cnt(){return Object.keys(ptr).length}
+ cv.addEventListener("pointerdown",function(e){
+  ptr[e.pointerId]={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY};
+  try{cv.setPointerCapture(e.pointerId)}catch(x){}
+  var n=cnt();
+  if(n===2){
+   if(claimed&&h.cancel)h.cancel();
+   claimed=false;pan=null;moved=true;
+   var ks=Object.keys(ptr),a=ptr[ks[0]],b=ptr[ks[1]];
+   pin={d:Math.hypot(a.x-b.x,a.y-b.y)||1,z:g.z};
+  }else if(n===1){
+   moved=false;pin=null;
+   claimed=!!(h.down&&h.down(e,g.pos(e)));
+   if(!claimed)pan={sl:wrap.scrollLeft,st:wrap.scrollTop};
+  }
+  if(claimed||g.z>1.02||cv.style.touchAction==="none")e.preventDefault();
+ });
+ cv.addEventListener("pointermove",function(e){
+  var q=ptr[e.pointerId];if(!q)return;
+  q.x=e.clientX;q.y=e.clientY;
+  if(pin&&cnt()>=2){
+   var ks=Object.keys(ptr),a=ptr[ks[0]],b=ptr[ks[1]],d=Math.hypot(a.x-b.x,a.y-b.y)||1;
+   g.zoom(pin.z*d/pin.d,(a.x+b.x)/2,(a.y+b.y)/2);e.preventDefault();return;
+  }
+  if(Math.hypot(q.x-q.sx,q.y-q.sy)>8)moved=true;
+  if(claimed){if(h.move)h.move(e,g.pos(e));e.preventDefault()}
+  else if(pan&&moved){wrap.scrollLeft=pan.sl-(q.x-q.sx);wrap.scrollTop=pan.st-(q.y-q.sy);e.preventDefault()}
+ });
+ function up(e,cancel){
+  if(!ptr[e.pointerId])return;
+  var was=cnt();delete ptr[e.pointerId];
+  if(was>=2){
+   pin=null;
+   var ks=Object.keys(ptr);
+   if(ks.length===1){var r0=ptr[ks[0]];r0.sx=r0.x;r0.sy=r0.y;pan={sl:wrap.scrollLeft,st:wrap.scrollTop};claimed=false;moved=true}
+   return;
+  }
+  if(claimed){if(h.up)h.up(e,g.pos(e),cancel)}
+  else if(!moved&&!cancel&&h.tap)h.tap(e,g.pos(e));
+  claimed=false;pan=null;
+ }
+ cv.addEventListener("pointerup",function(e){up(e,false)});
+ cv.addEventListener("pointercancel",function(e){up(e,true)});
+ wrap.addEventListener("wheel",function(e){
+  if(!(e.ctrlKey||e.metaKey))return;
+  e.preventDefault();g.zoom(g.z*(e.deltaY<0?1.2:1/1.2),e.clientX,e.clientY);
+ },{passive:false});
+ return g;
+}
+function medBox(){
+ var W=det?det.img.width:lastSheet.width,H=det?det.img.height:lastSheet.height;
+ if(det&&det.cells.length){
+  return[med(det.cells.map(function(c){return c.box[2]})),med(det.cells.map(function(c){return c.box[3]}))];
+ }
+ var m=.15*Math.min(W,H);return[m,m];
+}
+function edmsg(t){$("edmsg").textContent=t}
+function snap(){
+ if(!det)return;
+ det.undo=det.undo||[];
+ det.undo.push({cells:det.cells.map(function(c){return Object.assign({},c)}),slots:Object.assign({},slots)});
+ if(det.undo.length>40)det.undo.shift();
+}
+function undo(){
+ if(!det||!det.undo||!det.undo.length){edmsg("Tidak ada yang bisa diurungkan.");return false}
+ var s2=det.undo.pop();det.cells=s2.cells;slots=s2.slots;sel=-1;
+ edmsg("Perubahan terakhir diurungkan.");pk.rect=null;return true;
+}
 function drawDet2(){
  if(!det)return;
- var cv=$("det"),im=det.img,k=Math.min(1,900/im.width);
+ var cv=$("det"),im=det.img,k=Math.min(1,1800/im.width);
  det.k=k;cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);
+ cv.hidden=false;if(dv)dv.apply();
+ var sc=scOf(cv);det.sc=sc;
  var g=cv.getContext("2d");g.drawImage(im,0,0,cv.width,cv.height);
- g.font="bold 14px sans-serif";g.textBaseline="top";
+ g.font="bold "+Math.round(14*sc)+"px sans-serif";g.textBaseline="top";
  det.cells.forEach(function(c,i){
   var b=c.box,x=b[0]*k,y=b[1]*k,w=b[2]*k,h=b[3]*k,bad=!c.ch||c.low;
-  g.lineWidth=i===sel?4:2;g.strokeStyle=bad?"#dc2626":"#c2410c";g.setLineDash(c.ch?[]:[5,4]);g.strokeRect(x,y,w,h);
-  var t=c.ch||"?",tw=g.measureText(t).width+8;
-  g.setLineDash([]);g.fillStyle=bad?"#dc2626":"#c2410c";g.fillRect(x,y,tw,18);g.fillStyle="#fff";g.fillText(t,x+4,y+2);
-  if(i===sel&&editOn){g.fillStyle="#2563eb";g.fillRect(x+w-9,y+h-9,18,18)}
+  g.lineWidth=(i===sel?4:2)*sc;g.strokeStyle=bad?"#dc2626":"#c2410c";g.setLineDash(c.ch?[]:[5*sc,4*sc]);g.strokeRect(x,y,w,h);
+  var t=c.ch||"?",tw=g.measureText(t).width+8*sc;
+  g.setLineDash([]);g.fillStyle=bad?"#dc2626":"#c2410c";g.fillRect(x,y,tw,18*sc);g.fillStyle="#fff";g.fillText(t,x+4*sc,y+2*sc);
+  if(i===sel&&editOn){var hs=18*sc;g.fillStyle="#2563eb";g.fillRect(x+w-hs/2,y+h-hs/2,hs,hs)}
  });
- g.setLineDash([]);cv.hidden=false;
  if($("smode").value!=="guided")$("edtog").hidden=false;
 }
-function boxDown(e,p,cv){
- if(!det||!editOn)return;
- var k=det.k,hit=-1,md="move",ba=1e18;
- if(sel>=0){var b0=det.cells[sel].box;if(Math.abs(p.x-(b0[0]+b0[2])*k)<=20&&Math.abs(p.y-(b0[1]+b0[3])*k)<=20){hit=sel;md="size"}}
+function boxDown(p){
+ if(!det||!editOn)return false;
+ var k=det.k,tol=26*scOf($("det")),hit=-1,md="move",ba=1e18;
+ if(sel>=0&&det.cells[sel]){var b0=det.cells[sel].box;if(Math.abs(p.x-(b0[0]+b0[2])*k)<=tol&&Math.abs(p.y-(b0[1]+b0[3])*k)<=tol){hit=sel;md="size"}}
  if(hit<0)det.cells.forEach(function(c,i){
   var b=c.box;
   if(p.x>=b[0]*k&&p.x<=(b[0]+b[2])*k&&p.y>=b[1]*k&&p.y<=(b[1]+b[3])*k){var a=b[2]*b[3];if(a<ba){ba=a;hit=i}}
  });
- if(hit<0){sel=-1;drawDet2();return}
- sel=hit;bdrag={i:hit,mode:md,sx:p.x,sy:p.y,b0:det.cells[hit].box.slice(),moved:false};
- try{cv.setPointerCapture(e.pointerId)}catch(x){}
- drawDet2();e.preventDefault();
+ if(hit<0)return false;
+ sel=hit;bdrag={i:hit,mode:md,sx:p.x,sy:p.y,b0:det.cells[hit].box.slice(),moved:false,snapped:false};
+ drawDet2();return true;
 }
 function boxMove(p){
  var d=bdrag,k=det.k,dx=(p.x-d.sx)/k,dy=(p.y-d.sy)/k,c=det.cells[d.i],W=det.img.width,H=det.img.height;
- if(Math.abs(dx)+Math.abs(dy)>1)d.moved=true;
+ if(Math.abs(dx)+Math.abs(dy)>1){d.moved=true;if(!d.snapped){snap();d.snapped=true}}
  if(d.mode==="move")c.box=[clamp(d.b0[0]+dx,0,W-d.b0[2]),clamp(d.b0[1]+dy,0,H-d.b0[3]),d.b0[2],d.b0[3]];
  else c.box=[d.b0[0],d.b0[1],clamp(d.b0[2]+dx,8,W-d.b0[0]),clamp(d.b0[3]+dy,8,H-d.b0[1])];
  drawDet2();
@@ -741,83 +843,75 @@ function boxUp(){
  }
  drawDet2();renderSlots();
 }
-$("edtog").onclick=function(){
- editOn=!editOn;sel=-1;
- $("edtog").textContent="Atur kotak deteksi: "+(editOn?"hidup":"mati");
- $("det").style.touchAction=editOn?"none":"pan-y";
- $("edhint").hidden=!editOn;
- drawDet2();
-};
-/* pilih huruf untuk satu kotak hasil langsung dari gambar yang dikirim */
-var pk={ch:null,k:1,start:null,rect:null};
+/* cut garis pada mode terpandu */
+function gDown(p){
+ if(!guide)return false;
+ var k=guide.k,best=null,bd=24*scOf($("det"));
+ guide.gd.rows.forEach(function(rw,ri){
+  if(p.y<rw.y0*k-10||p.y>rw.y1*k+10)return;
+  rw.cuts.forEach(function(c,ci){var d=Math.abs(p.x-(c-rw.off+rw.s*(p.y/k-rw.ym))*k);if(d<bd){bd=d;best={r:ri,c:ci}}});
+ });
+ if(best){gdrag=best;return true}
+ return false;
+}
+function gMove(p){
+ if(!gdrag)return;
+ var rw=guide.gd.rows[gdrag.r],cs=rw.cuts,i=gdrag.c,k=guide.k;
+ var mn=Math.max(3,Math.round(.15*(rw.xr-rw.xl)/(cs.length+1)));
+ var lo=(i?cs[i-1]:rw.xl)+mn,hi=(i<cs.length-1?cs[i+1]:rw.xr+1)-mn;
+ cs[i]=Math.round(Math.min(hi,Math.max(lo,p.x/k-rw.s*(p.y/k-rw.ym)+rw.off)));
+ drawGuide();
+}
+function gUp(){if(!gdrag)return;gdrag=null;guideApply(guide.info,guide.gd);renderSlots()}
+/* ===== pilih huruf untuk satu kotak hasil langsung dari gambar yang dikirim ===== */
+var pk={ch:null,k:1,start:null,rect:null,draw:false};
 function pkImg(){return det?det.img:lastSheet}
 function openPicker(ch){
  var im=pkImg();if(!im)return;
- pk.ch=ch;pk.rect=null;pk.k=Math.min(1,Math.max(200,Math.min(window.innerWidth-70,900))/im.width);
+ pk.ch=ch;pk.rect=null;pk.start=null;pk.draw=false;pk.k=Math.min(1,1800/im.width);
  var c=$("pkc");c.width=Math.round(im.width*pk.k);c.height=Math.round(im.height*pk.k);
- $("pkt").textContent="Pilih gambar untuk huruf \""+ch+"\"";
- drawPk();$("pk").hidden=false;document.body.style.overflow="hidden";
+ $("pkt").textContent="Pilih gambar untuk huruf \""+ch+"\"";$("pkm").textContent="";$("pk_draw").textContent="Gambar kotak sendiri: mati";
+ $("pk").hidden=false;document.body.style.overflow="hidden";
+ pv.fit();
 }
 function closePicker(){$("pk").hidden=true;document.body.style.overflow="";pk.start=null;pk.rect=null}
 function drawPk(){
- var im=pkImg(),c=$("pkc"),g=c.getContext("2d"),k=pk.k;
- g.drawImage(im,0,0,c.width,c.height);g.font="bold 13px sans-serif";g.textBaseline="top";
+ var im=pkImg(),c=$("pkc"),g=c.getContext("2d"),k=pk.k,sc=scOf(c);
+ g.drawImage(im,0,0,c.width,c.height);g.font="bold "+Math.round(13*sc)+"px sans-serif";g.textBaseline="top";
  if(det)det.cells.forEach(function(q){
   var b=q.box,cur=q.ch===pk.ch;
-  g.setLineDash([]);g.lineWidth=cur?4:2;g.strokeStyle=cur?"#16a34a":"#c2410c";g.strokeRect(b[0]*k,b[1]*k,b[2]*k,b[3]*k);
-  if(q.ch){var tw=g.measureText(q.ch).width+8;g.fillStyle=cur?"#16a34a":"#c2410c";g.fillRect(b[0]*k,b[1]*k,tw,16);g.fillStyle="#fff";g.fillText(q.ch,b[0]*k+4,b[1]*k+1)}
+  g.setLineDash([]);g.lineWidth=(cur?4:2)*sc;g.strokeStyle=cur?"#16a34a":"#c2410c";g.strokeRect(b[0]*k,b[1]*k,b[2]*k,b[3]*k);
+  if(q.ch){var tw=g.measureText(q.ch).width+8*sc;g.fillStyle=cur?"#16a34a":"#c2410c";g.fillRect(b[0]*k,b[1]*k,tw,16*sc);g.fillStyle="#fff";g.fillText(q.ch,b[0]*k+4*sc,b[1]*k+sc)}
  });
- if(pk.rect){var r=pk.rect;g.setLineDash([6,4]);g.lineWidth=2;g.strokeStyle="#2563eb";g.strokeRect(r[0],r[1],r[2],r[3])}
+ if(pk.rect){var r=pk.rect;g.setLineDash([6*sc,4*sc]);g.lineWidth=2*sc;g.strokeStyle="#2563eb";g.strokeRect(r[0],r[1],r[2],r[3])}
 }
-function pkPos(e){var c=$("pkc"),r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height}}
 function pkAssignCell(i){
  var ch=pk.ch,c=det.cells[i];
+ if(!c.cv){
+  var r=cropFromBox(det.img,c.box,c.ref||detRef());
+  if(!r){$("pkm").textContent="Kotak itu kosong, tidak ada tulisan di dalamnya. Pilih kotak lain atau ketuk tepat di huruf.";return false}
+  c.cv=r.cv;c.hf=r.hf;c.blf=r.blf;
+ }
+ snap();
  det.cells.forEach(function(o){if(o.ch===ch)o.ch=null});
  c.ch=ch;c.low=false;setSlot(ch,c.cv,"auto",c.hf,c.blf);slots[ch].low=false;
+ return true;
+}
+function pkMakeBox(box,fixed){
+ var r=cropFromBox(pkImg(),box,detRef());
+ if(!r){$("pkm").textContent="Tidak ada tulisan di kotak itu. Ketuk tepat di huruf, atau nyalakan \"Gambar kotak sendiri\" untuk mengatur ukurannya.";drawPk();return}
+ if(!det)det={img:lastSheet,cells:[],k:1,undo:[]};
+ snap();
+ det.cells.forEach(function(o){if(o.ch===pk.ch)o.ch=null});
+ det.cells.push({cv:r.cv,hf:r.hf,blf:r.blf,box:fixed?box:r.box,ref:detRef()||r.hf*r.cv.height,ch:pk.ch,low:false});
+ setSlot(pk.ch,r.cv,"auto",r.hf,r.blf);slots[pk.ch].low=false;
+ pkFinish();
 }
 function pkFinish(){
  closePicker();
  if(det&&$("smode").value!=="guided")drawDet2();
  renderSlots();
 }
-(function(){
- var c=$("pkc");
- c.addEventListener("pointerdown",function(e){pk.start=pkPos(e);pk.rect=null;try{c.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault()});
- c.addEventListener("pointermove",function(e){
-  if(!pk.start)return;
-  var p=pkPos(e);
-  if(pk.rect||Math.hypot(p.x-pk.start.x,p.y-pk.start.y)>12){
-   pk.rect=[Math.min(p.x,pk.start.x),Math.min(p.y,pk.start.y),Math.abs(p.x-pk.start.x),Math.abs(p.y-pk.start.y)];drawPk();
-  }
-  e.preventDefault();
- });
- c.addEventListener("pointerup",function(e){
-  if(!pk.start)return;
-  var p=pkPos(e),k=pk.k,rect=pk.rect;pk.start=null;pk.rect=null;
-  if(rect&&rect[2]>6&&rect[3]>6){
-   var box=[rect[0]/k,rect[1]/k,rect[2]/k,rect[3]/k],r=cropFromBox(pkImg(),box,detRef());
-   if(!r){drawPk();$("sres").textContent="Tidak ada tulisan di kotak yang digambar. Coba gambar kotak lebih pas di sekitar huruf.";return}
-   if(!det)det={img:lastSheet,cells:[],k:1};
-   det.cells.forEach(function(o){if(o.ch===pk.ch)o.ch=null});
-   det.cells.push({cv:r.cv,hf:r.hf,blf:r.blf,box:r.box,ref:detRef()||r.hf*r.cv.height,ch:pk.ch,low:false});
-   setSlot(pk.ch,r.cv,"auto",r.hf,r.blf);slots[pk.ch].low=false;
-   pkFinish();return;
-  }
-  if(det){
-   var hit=-1,ba=1e18;
-   det.cells.forEach(function(q,i){
-    var b=q.box;
-    if(p.x>=b[0]*k&&p.x<=(b[0]+b[2])*k&&p.y>=b[1]*k&&p.y<=(b[1]+b[3])*k){var a=b[2]*b[3];if(a<ba){ba=a;hit=i}}
-   });
-   if(hit>=0){pkAssignCell(hit);pkFinish();return}
-  }
-  drawPk();
- });
- c.addEventListener("pointercancel",function(){pk.start=null;pk.rect=null;drawPk()});
- $("pkx").onclick=closePicker;
- $("pkg").onclick=function(){repCh=pk.ch;closePicker();$("one").click()};
- $("pk").addEventListener("click",function(e){if(e.target===$("pk"))closePicker()});
-})();
 function guideApply(info,gd){
  var l=list(),cells=guideCells(info,gd),pm=$("place").value,pl;
  if(pm==="seq"){
@@ -829,7 +923,7 @@ function guideApply(info,gd){
  return pl.pairs.length;
 }
 function drawGuide(){
- var gi=guide,info=gi.info,cv=$("det"),k=Math.min(1,900/info.W),l=list(),idx=0;
+ var gi=guide,info=gi.info,cv=$("det"),k=Math.min(1,1800/info.W),l=list(),idx=0;
  gi.k=k;
  cv.width=Math.round(info.W*k);cv.height=Math.round(info.H*k);
  var g=cv.getContext("2d");g.drawImage(gi.img,0,0,cv.width,cv.height);
@@ -853,7 +947,7 @@ function drawGuide(){
    g.fillStyle="#fff";g.fillText("↔",mx-7,my-7);
   });
  });
- cv.hidden=false;
+ cv.hidden=false;if(dv)dv.apply();
 }
 function runGuided(){
  var l=list();
@@ -883,30 +977,77 @@ function runGuided(){
  },30);
 }
 (function(){
- var cv=$("det");
- function pos(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}}
- cv.addEventListener("pointerdown",function(e){
-  if($("smode").value!=="guided"){boxDown(e,pos(e),cv);return}
-  if(!guide)return;
-  var p=pos(e),k=guide.k,best=null,bd=22;
-  guide.gd.rows.forEach(function(rw,ri){
-   if(p.y<rw.y0*k-10||p.y>rw.y1*k+10)return;
-   rw.cuts.forEach(function(c,ci){var d=Math.abs(p.x-(c-rw.off+rw.s*(p.y/k-rw.ym))*k);if(d<bd){bd=d;best={r:ri,c:ci}}});
-  });
-  if(best){gdrag=best;try{cv.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault()}
+ var gd=function(){return $("smode").value==="guided"};
+ dv=Gest($("det"),$("detw"),{
+  ta:function(z){return z>1.02||(editOn&&!gd())?"none":"pan-y"},
+  redraw:function(){if(gd()){if(guide)drawGuide()}else drawDet2()},
+  down:function(e,p){return gd()?gDown(p):boxDown(p)},
+  move:function(e,p){if(bdrag)boxMove(p);else gMove(p)},
+  up:function(){if(bdrag)boxUp();else gUp()},
+  cancel:function(){if(bdrag){bdrag=null;drawDet2()}gdrag=null},
+  tap:function(){if(det&&editOn&&sel>=0&&!gd()){sel=-1;drawDet2()}}
  });
- cv.addEventListener("pointermove",function(e){
-  if(bdrag){boxMove(pos(e));e.preventDefault();return}
-  if(!gdrag)return;
-  var rw=guide.gd.rows[gdrag.r],cs=rw.cuts,i=gdrag.c,p=pos(e),k=guide.k;
-  var mn=Math.max(3,Math.round(.15*(rw.xr-rw.xl)/(cs.length+1)));
-  var lo=(i?cs[i-1]:rw.xl)+mn,hi=(i<cs.length-1?cs[i+1]:rw.xr+1)-mn;
-  cs[i]=Math.round(Math.min(hi,Math.max(lo,p.x/k-rw.s*(p.y/k-rw.ym)+rw.off)));
-  drawGuide();e.preventDefault();
+ function zb(v,f){return function(){var c=v.center();v.zoom(v.z*f,c.x,c.y)}}
+ $("dz_in").onclick=zb(dv,1.5);$("dz_out").onclick=zb(dv,1/1.5);$("dz_fit").onclick=function(){dv.fit()};
+ $("edtog").onclick=function(){
+  editOn=!editOn;sel=-1;
+  $("edtog").textContent="Atur kotak deteksi: "+(editOn?"hidup":"mati");
+  $("edhint").hidden=!editOn;$("edtb").hidden=!editOn;$("edmsg").hidden=!editOn;edmsg("");
+  dv.apply();drawDet2();
+ };
+ $("ed_undo").onclick=function(){if(undo()){drawDet2();renderSlots()}};
+ $("ed_del").onclick=function(){
+  if(!det||sel<0||!det.cells[sel]){edmsg("Ketuk dulu kotak yang mau dihapus.");return}
+  snap();var c=det.cells.splice(sel,1)[0];sel=-1;
+  edmsg("Kotak "+(c.ch?c.ch:"tanpa huruf")+" dihapus. Hasil huruf di bawah tidak berubah.");drawDet2();
+ };
+ $("ed_clr").onclick=function(){
+  if(!det)return;
+  var n=det.cells.filter(function(c){return !c.ch}).length;
+  if(!n){edmsg("Tidak ada kotak tanpa huruf.");return}
+  snap();det.cells=det.cells.filter(function(c){return c.ch});sel=-1;
+  edmsg(n+" kotak tanpa huruf dihapus.");drawDet2();
+ };
+ $("ed_add").onclick=function(){
+  if(!det){if(!lastSheet)return;det={img:lastSheet,cells:[],k:1,undo:[]}}
+  snap();
+  var im=det.img,mb=medBox(),wr=$("detw"),cv=$("det"),
+   fx=clamp((wr.scrollLeft+wr.clientWidth/2)/Math.max(1,cv.offsetWidth),0,1),
+   fy=clamp((wr.scrollTop+Math.min(wr.clientHeight,cv.offsetHeight)/2)/Math.max(1,cv.offsetHeight),0,1),
+   w=Math.min(mb[0],im.width),h=Math.min(mb[1],im.height);
+  det.cells.push({cv:null,hf:0,blf:0,box:[clamp(fx*im.width-w/2,0,im.width-w),clamp(fy*im.height-h/2,0,im.height-h),w,h],ref:detRef()||h,ch:null,low:false});
+  sel=det.cells.length-1;editOn=true;drawDet2();
+  edmsg("Kotak baru dibuat. Seret ke huruf, atur ukurannya, lalu ketuk kotak hasil di bawah untuk memilihnya.");
+ };
+ /* pemilih */
+ pv=Gest($("pkc"),$("pkw"),{
+  ta:function(){return"none"},
+  redraw:drawPk,
+  down:function(e,p){if(!pk.draw)return false;pk.start=p;pk.rect=null;return true},
+  move:function(e,p){if(!pk.start)return;pk.rect=[Math.min(p.x,pk.start.x),Math.min(p.y,pk.start.y),Math.abs(p.x-pk.start.x),Math.abs(p.y-pk.start.y)];drawPk()},
+  cancel:function(){pk.start=null;pk.rect=null;drawPk()},
+  up:function(e,p,cancel){
+   var r=pk.rect;pk.start=null;pk.rect=null;
+   if(cancel||!r||r[2]<6||r[3]<6){drawPk();return}
+   pkMakeBox([r[0]/pk.k,r[1]/pk.k,r[2]/pk.k,r[3]/pk.k],false);
+  },
+  tap:function(e,p){
+   var k=pk.k,hit=-1,ba=1e18;
+   if(det)det.cells.forEach(function(q,i){
+    var b=q.box;
+    if(p.x>=b[0]*k&&p.x<=(b[0]+b[2])*k&&p.y>=b[1]*k&&p.y<=(b[1]+b[3])*k){var a=b[2]*b[3];if(a<ba){ba=a;hit=i}}
+   });
+   if(hit>=0){if(pkAssignCell(hit))pkFinish();else drawPk();return}
+   var im=pkImg(),mb=medBox(),w=Math.min(mb[0],im.width),h=Math.min(mb[1],im.height),cx=p.x/k,cy=p.y/k;
+   pkMakeBox([clamp(cx-w/2,0,im.width-w),clamp(cy-h/2,0,im.height-h),w,h],true);
+  }
  });
- function end(){if(bdrag){boxUp();return}
-  if(!gdrag)return;gdrag=null;guideApply(guide.info,guide.gd);renderSlots()}
- cv.addEventListener("pointerup",end);cv.addEventListener("pointercancel",end);
+ $("pz_in").onclick=zb(pv,1.5);$("pz_out").onclick=zb(pv,1/1.5);$("pz_fit").onclick=function(){pv.fit()};
+ $("pk_draw").onclick=function(){pk.draw=!pk.draw;$("pk_draw").textContent="Gambar kotak sendiri: "+(pk.draw?"hidup":"mati")};
+ $("pk_undo").onclick=function(){if(undo()){drawPk();renderSlots()}};
+ $("pkx").onclick=closePicker;
+ $("pkg").onclick=function(){repCh=pk.ch;closePicker();$("one").click()};
+ $("pk").addEventListener("click",function(e){if(e.target===$("pk"))closePicker()});
 })();
 
 /* ===== pemisahan berbasis bidang huruf: huruf bergaris tepi tebal (graffiti, outline) yang saling menempel ===== */
@@ -1376,7 +1517,7 @@ function runRecog(){
 
 function runSheet(){
  if(!lastSheet)return;
- slots={};guide=null;det=null;sel=-1;$("det").hidden=true;$("edtog").hidden=true;$("edhint").hidden=true;
+ slots={};guide=null;det=null;sel=-1;$("det").hidden=true;$("edtog").hidden=true;$("edhint").hidden=true;$("edtb").hidden=true;$("edmsg").hidden=true;if(dv){dv.z=1;$("detw").scrollLeft=0;$("detw").scrollTop=0}editOn=false;$("edtog").textContent="Atur kotak deteksi: mati";
  if($("smode").value==="recog"){runRecog();return}
  if($("smode").value==="guided"){runGuided();return}
  if($("smode").value==="grid"){gridSplit(lastSheet);$("sres").textContent="Dipotong sesuai kotak template ("+cols()+" kolom).";renderSlots();return}
