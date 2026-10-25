@@ -150,6 +150,7 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <label for="sb">Jarak antar huruf: <b id="sbv">60</b></label>
 <input id="sb" type="range" min="0" max="160" value="60">
 <label class="chk"><input type="checkbox" id="fillc"><span>Isi bagian dalam huruf (untuk gambar outline / garis tepi saja)</span></label>
+<label class="chk"><input type="checkbox" id="lcc" checked><span>Huruf kecil memakai bentuk huruf besar yang sama (a = A, b = B, dan seterusnya), hanya untuk huruf yang belum diisi sendiri. Berlaku juga sebaliknya.</span></label>
 <button id="build" disabled>Buat font ulang</button>
 <div class="msg">Pratinjau di langkah 4 diperbarui otomatis setiap gambar atau pengaturan berubah.</div>
 <div class="row"><button class="alt" id="savep">Simpan proyek</button><label class="btn alt" for="openp">Buka proyek</label></div>
@@ -205,7 +206,7 @@ function save(name,data){
  downloads.save({filename:name,data:data}).catch(function(e){if(e&&e.code!=="declined")$("msg").textContent="Gagal menyimpan: "+(e.message||e.code)});
 }
 ["th","sc","sb","bl","sens"].forEach(function(k){$(k).oninput=function(){$(k+"v").textContent=$(k).value}});
-["th","sc","sb","fillc"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
+["th","sc","sb","fillc","lcc"].forEach(function(k){$(k).onchange=function(){if(fontBuf)sched(500)}});
 
 /* tab */
 $("tabA").onclick=function(){$("pA").hidden=false;$("pB").hidden=true;$("tabA").className="";$("tabB").className="alt"};
@@ -706,6 +707,197 @@ function runGuided(){
  cv.addEventListener("pointerup",end);cv.addEventListener("pointercancel",end);
 })();
 
+/* ===== pemisahan berbasis bidang huruf: huruf bergaris tepi tebal (graffiti, outline) yang saling menempel ===== */
+function splitMask(mask,w,h,area){
+ var cur=mask,i,x,y,k,N=w*h,lab=new Int32Array(N),st=new Int32Array(N);
+ for(k=1;k<=80;k++){
+  var nx=new Uint8Array(N),any=0;
+  for(y=1;y<h-1;y++)for(x=1;x<w-1;x++){i=y*w+x;if(cur[i]&&cur[i-1]&&cur[i+1]&&cur[i-w]&&cur[i+w]){nx[i]=1;any++}}
+  if(!any)return null;
+  cur=nx;lab.fill(0);
+  var areas=[0],nl=0;
+  for(i=0;i<N;i++){
+   if(!cur[i]||lab[i])continue;
+   nl++;var sp=0,ar=0;st[sp++]=i;lab[i]=nl;
+   while(sp){
+    var p=st[--sp],cx=p%w;ar++;
+    if(cx>0&&cur[p-1]&&!lab[p-1]){lab[p-1]=nl;st[sp++]=p-1}
+    if(cx<w-1&&cur[p+1]&&!lab[p+1]){lab[p+1]=nl;st[sp++]=p+1}
+    if(p>=w&&cur[p-w]&&!lab[p-w]){lab[p-w]=nl;st[sp++]=p-w}
+    if(p+w<N&&cur[p+w]&&!lab[p+w]){lab[p+w]=nl;st[sp++]=p+w}
+   }
+   areas.push(ar);
+  }
+  var good=[],c;
+  for(c=1;c<=nl;c++)if(areas[c]>=.06*area)good.push(c);
+  if(good.length>=2){
+   good.sort(function(a,b){return areas[b]-areas[a]});
+   var s1=good[0],s2=good[1],out=new Uint8Array(N),dq=new Int32Array(N),qh=0,qt=0,seen=new Uint8Array(N);
+   for(i=0;i<N;i++){if(lab[i]===s1){out[i]=1;seen[i]=1;dq[qt++]=i}else if(lab[i]===s2){out[i]=2;seen[i]=1;dq[qt++]=i}}
+   while(qh<qt){
+    var p2=dq[qh++],cx2=p2%w,q;
+    if(cx2>0){q=p2-1;if(!seen[q]){seen[q]=1;out[q]=out[p2];dq[qt++]=q}}
+    if(cx2<w-1){q=p2+1;if(!seen[q]){seen[q]=1;out[q]=out[p2];dq[qt++]=q}}
+    if(p2>=w){q=p2-w;if(!seen[q]){seen[q]=1;out[q]=out[p2];dq[qt++]=q}}
+    if(p2+w<N){q=p2+w;if(!seen[q]){seen[q]=1;out[q]=out[p2];dq[qt++]=q}}
+   }
+   for(i=0;i<N;i++)if(!mask[i])out[i]=0;
+   return out;
+  }
+ }
+ return null;
+}
+function facesSplit(im,Mx){
+ var W=im.width,H=im.height,n=W*H,px=im.getContext("2d").getImageData(0,0,W,H).data,i,x,y,c;
+ var lum=new Float32Array(n);
+ for(i=0;i<n;i++)lum[i]=.299*px[i*4]+.587*px[i*4+1]+.114*px[i*4+2];
+ var t=Math.min(otsu(lum),170),blk=new Uint8Array(n),bx0=W,by0=H,bx1=-1,by1=-1,nb=0;
+ for(y=0;y<H;y++)for(x=0;x<W;x++){i=y*W+x;if(lum[i]<t){blk[i]=1;nb++;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y}}
+ if(nb<50)return null;
+ /* segel celah kecil pada garis tepi supaya bidang putih tiap huruf tidak bocor ke latar */
+ var r=Math.max(1,Math.round(Math.min(W,H)/250)),sealed=dilate(blk,W,H,r);
+ var lab=new Int32Array(n),st=new Int32Array(n),areas=[0],bbs=[null],touch=[false],nl=0;
+ for(i=0;i<n;i++){
+  if(sealed[i]||lab[i])continue;
+  nl++;var sp=0,ar=0,x0=W,y0=H,x1=-1,y1=-1,tb=false;st[sp++]=i;lab[i]=nl;
+  while(sp){
+   var p=st[--sp],cx=p%W,cy=(p-cx)/W,q;ar++;
+   if(cx<x0)x0=cx;if(cx>x1)x1=cx;if(cy<y0)y0=cy;if(cy>y1)y1=cy;
+   if(cx===0||cy===0||cx===W-1||cy===H-1)tb=true;
+   if(cx>0){q=p-1;if(!sealed[q]&&!lab[q]){lab[q]=nl;st[sp++]=q}}
+   if(cx<W-1){q=p+1;if(!sealed[q]&&!lab[q]){lab[q]=nl;st[sp++]=q}}
+   if(cy>0){q=p-W;if(!sealed[q]&&!lab[q]){lab[q]=nl;st[sp++]=q}}
+   if(cy<H-1){q=p+W;if(!sealed[q]&&!lab[q]){lab[q]=nl;st[sp++]=q}}
+  }
+  areas.push(ar);bbs.push([x0,y0,x1+1,y1+1]);touch.push(tb);
+ }
+ var fa=[];
+ for(c=1;c<=nl;c++)if(!touch[c]&&areas[c]>=40)fa.push(c);
+ if(fa.length<2)return null;
+ fa.sort(function(a,b){return areas[b]-areas[a]});
+ var ref=areas[fa[Math.min(fa.length-1,Math.floor(Mx/3))]],bigs=[],smalls=[];
+ fa.forEach(function(c){if(areas[c]>=.45*ref)bigs.push(c);else if(areas[c]>=.08*ref)smalls.push(c)});
+ if(bigs.length<3||bigs.length<.8*Mx||bigs.length>1.25*Mx)return null;
+ var cov=0;bigs.forEach(function(c){cov+=areas[c]});
+ if(cov<.2*(bx1-bx0+1)*(by1-by0+1))return null;
+ var own=new Int32Array(n),l2l=new Int32Array(nl+1),letters=[],nid=0;
+ bigs.forEach(function(c){nid++;l2l[c]=nid;letters.push({id:nid,comp:c,area:areas[c],bb:bbs[c].slice()})});
+ for(i=0;i<n;i++){var lb=lab[i];if(lb&&l2l[lb])own[i]=l2l[lb]}
+ function recount(L){
+  var b=L.bb,a=0,xa=W,ya=H,xb=-1,yb=-1,xx,yy;
+  for(yy=b[1];yy<b[3];yy++)for(xx=b[0];xx<b[2];xx++)if(own[yy*W+xx]===L.id){a++;if(xx<xa)xa=xx;if(xx>xb)xb=xx;if(yy<ya)ya=yy;if(yy>yb)yb=yy}
+  L.area=a;if(a)L.bb=[xa,ya,xb+1,yb+1];
+ }
+ var medA=med(letters.map(function(a){return a.area}));
+ /* terlalu banyak bidang besar: bidang terkecil dijadikan serpihan dan digabung nanti */
+ while(letters.length>Mx){
+  var mi=0;letters.forEach(function(a,k){if(a.area<letters[mi].area)mi=k});
+  var Ld=letters.splice(mi,1)[0],bd=Ld.bb;
+  for(y=bd[1];y<bd[3];y++)for(x=bd[0];x<bd[2];x++)if(own[y*W+x]===Ld.id)own[y*W+x]=0;
+  smalls.push(Ld.comp);
+ }
+ /* terlalu sedikit: serpihan cukup besar di luar kotak huruf lain dijadikan huruf sendiri (huruf yang bidang putihnya terpecah) */
+ while(letters.length<Mx){
+  var pi=-1,pa=0;
+  smalls.forEach(function(c,k){
+   if(areas[c]<.2*ref||areas[c]<=pa)return;
+   var b=bbs[c],cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2,inb=letters.some(function(L){return cx>L.bb[0]&&cx<L.bb[2]&&cy>L.bb[1]&&cy<L.bb[3]});
+   if(!inb){pi=k;pa=areas[c]}
+  });
+  if(pi<0)break;
+  var c0=smalls.splice(pi,1)[0],b0=bbs[c0];
+  nid++;letters.push({id:nid,comp:c0,area:areas[c0],bb:b0.slice()});
+  for(y=b0[1];y<b0[3];y++)for(x=b0[0];x<b0[2];x++)if(lab[y*W+x]===c0)own[y*W+x]=nid;
+ }
+ /* masih kurang: belah bidang terbesar yang menyatu (dua huruf berbagi satu bidang putih) */
+ function rowsOf(arr){
+  var a=arr.slice().sort(function(p,q){return p.bb[1]+p.bb[3]-q.bb[1]-q.bb[3]}),mh=med(a.map(function(L){return L.bb[3]-L.bb[1]})),rows=[];
+  a.forEach(function(L){
+   var rw=rows[rows.length-1],cy=(L.bb[1]+L.bb[3])/2;
+   if(rw&&cy-rw.sum/rw.g.length<=.5*mh){rw.g.push(L);rw.sum+=cy}else rows.push({g:[L],sum:cy});
+  });
+  return rows;
+ }
+ var user=parseLayout($("lay").value);
+ var failed={},medW=med(letters.map(function(a){return a.bb[2]-a.bb[0]}));
+ function spl(a){return Math.max((a.bb[2]-a.bb[0])/medW,a.area/medA)}
+ while(letters.length<Mx){
+  var rws=rowsOf(letters),exp=(user.length===rws.length&&user.reduce(function(a,b){return a+b},0)===Mx)?user:evenLayout(Mx,rws.length),pool=[];
+  rws.forEach(function(rw,ri){if(rw.g.length<exp[ri])rw.g.forEach(function(L){pool.push(L)})});
+  var cand=(pool.length?pool:letters).filter(function(a){return !failed[a.id]}).sort(function(a,b){return spl(b)-spl(a)})[0];
+  if(!cand||spl(cand)<(pool.length?.9:1.15))break;
+  var b2=cand.bb,w2=b2[2]-b2[0],h2=b2[3]-b2[1],m2=new Uint8Array(w2*h2),yy,xx,a2=0;
+  for(yy=0;yy<h2;yy++)for(xx=0;xx<w2;xx++)if(own[(b2[1]+yy)*W+b2[0]+xx]===cand.id){m2[yy*w2+xx]=1;a2++}
+  var o2=splitMask(m2,w2,h2,a2);
+  if(!o2){failed[cand.id]=1;continue}
+  nid++;var nl2={id:nid,comp:0,area:0,bb:b2.slice()};
+  for(yy=0;yy<h2;yy++)for(xx=0;xx<w2;xx++)if(o2[yy*w2+xx]===2)own[(b2[1]+yy)*W+b2[0]+xx]=nid;
+  recount(cand);recount(nl2);letters.push(nl2);
+ }
+ var sq=Math.sqrt(medA),D=Math.max(3,Math.round(.18*sq));
+ /* serpihan putih kecil (sorotan, bagian huruf yang terpisah) digabung ke huruf yang bersinggungan */
+ smalls.forEach(function(c){
+  var b=bbs[c],xa=Math.max(0,b[0]-D),ya=Math.max(0,b[1]-D),xb=Math.min(W,b[2]+D),yb=Math.min(H,b[3]+D),w=xb-xa,h=yb-ya,m=new Uint8Array(w*h),xx,yy;
+  for(yy=0;yy<h;yy++)for(xx=0;xx<w;xx++)if(lab[(ya+yy)*W+xa+xx]===c)m[yy*w+xx]=1;
+  var dm=dilate(m,w,h,D),votes={},bestId=0,bv=0;
+  for(yy=0;yy<h;yy++)for(xx=0;xx<w;xx++)if(dm[yy*w+xx]){var o=own[(ya+yy)*W+xa+xx];if(o){votes[o]=(votes[o]||0)+1;if(votes[o]>bv){bv=votes[o];bestId=o}}}
+  if(!bestId){
+   var cxs=(b[0]+b[2])/2,cys=(b[1]+b[3])/2,bd=1e18;
+   letters.forEach(function(L){var d=Math.hypot((L.bb[0]+L.bb[2])/2-cxs,(L.bb[1]+L.bb[3])/2-cys);if(d<bd){bd=d;bestId=L.id}});
+   if(bd>1.5*sq)bestId=0;
+  }
+  if(bestId)for(yy=b[1];yy<b[3];yy++)for(xx=b[0];xx<b[2];xx++)if(lab[yy*W+xx]===c)own[yy*W+xx]=bestId;
+ });
+ letters.forEach(function(L){
+  /* kotak batas berubah setelah penggabungan: hitung ulang dari seluruh gambar */
+  L.bb=[0,0,W,H];
+ });
+ var bbm={};
+ for(y=0;y<H;y++)for(x=0;x<W;x++){
+  var o=own[y*W+x];if(!o)continue;
+  var bb2=bbm[o];if(!bb2){bbm[o]=[x,y,x+1,y+1];continue}
+  if(x<bb2[0])bb2[0]=x;if(x+1>bb2[2])bb2[2]=x+1;if(y<bb2[1])bb2[1]=y;if(y+1>bb2[3])bb2[3]=y+1;
+ }
+ letters=letters.filter(function(L){if(!bbm[L.id])return false;L.bb=bbm[L.id];L.w=L.bb[2]-L.bb[0];L.h=L.bb[3]-L.bb[1];L.cx=(L.bb[0]+L.bb[2])/2;L.cy=(L.bb[1]+L.bb[3])/2;return true});
+ if(!letters.length)return null;
+ /* urutan baca: kelompokkan per baris menurut jarak vertikal, tiap baris kiri ke kanan */
+ var medH=med(letters.map(function(L){return L.h})),d=Math.max(3,Math.round(.12*medH));
+ letters.sort(function(a,b){return a.cy-b.cy});
+ var rows=[];
+ letters.forEach(function(L){
+  var rw=rows[rows.length-1];
+  if(rw&&L.cy-rw.sum/rw.g.length<=.5*medH){rw.g.push(L);rw.sum+=L.cy;return}
+  rows.push({g:[L],sum:L.cy});
+ });
+ var seq=[],up=1,dnn=0,ref2=1;
+ rows.forEach(function(rw){
+  rw.g.sort(function(a,b){return a.cx-b.cx});
+  rw.g.forEach(function(L){L.ex=[Math.max(0,L.bb[0]-d),Math.max(0,L.bb[1]-d),Math.min(W,L.bb[2]+d),Math.min(H,L.bb[3]+d)]});
+  var base=med(rw.g.map(function(L){return L.ex[3]}));
+  rw.g.forEach(function(L){up=Math.max(up,base-L.ex[1]);dnn=Math.max(dnn,L.ex[3]-base);ref2=Math.max(ref2,L.ex[3]-L.ex[1]);L.base=base;seq.push(L)});
+ });
+ var pad=Math.max(4,Math.round(.07*(up+dnn))),Hc=up+dnn+2*pad,crops=[],out=[];
+ seq.forEach(function(L){
+  var e=L.ex,w=e[2]-e[0],h=e[3]-e[1],sub=new Uint8Array(w*h),xx,yy;
+  for(yy=0;yy<h;yy++)for(xx=0;xx<w;xx++)if(own[(e[1]+yy)*W+e[0]+xx]===L.id)sub[yy*w+xx]=1;
+  var reg=dilate(sub,w,h,d);
+  var cv=document.createElement("canvas");cv.width=w+2*pad;cv.height=Hc;
+  var cg=cv.getContext("2d");cg.fillStyle="#fff";cg.fillRect(0,0,cv.width,cv.height);
+  var id=cg.createImageData(w,h),dd=id.data;
+  for(var k=0;k<dd.length;k++)dd[k]=255;
+  for(yy=0;yy<h;yy++)for(xx=0;xx<w;xx++){
+   if(!reg[yy*w+xx])continue;
+   var si=(e[1]+yy)*W+e[0]+xx,ow=own[si];
+   if(ow&&ow!==L.id)continue;
+   var di=(yy*w+xx)*4;dd[di]=px[si*4];dd[di+1]=px[si*4+1];dd[di+2]=px[si*4+2];
+  }
+  cg.putImageData(id,pad,Math.round(pad+up+(e[1]-L.base)));
+  crops.push(cv);
+  out.push({x0:e[0],y0:e[1],w:w,h:h});
+ });
+ return{count:seq.length,seq:out,crops:crops,hf:ref2/Hc,blf:(pad+up)/Hc,W:W,H:H,ok:true};
+}
+
 /* ===== pengenalan cerdas: baca bentuk tiap huruf lalu tempatkan ke kotak yang benar ===== */
 var GN=20,
  RF=[["Arial","normal"],["Arial","bold"],["Georgia","normal"],["Georgia","bold"],["Times New Roman","normal"],["Courier New","bold"],["Verdana","normal"],["Trebuchet MS","normal"],["Impact","normal"],["Comic Sans MS","normal"],["sans-serif","normal"],["serif","normal"],["cursive","normal"]],
@@ -872,8 +1064,8 @@ function assignFree(C,N,M,thr){
  }
  return pr;
 }
-function evalHyp(cells,l,mode,name){
- var fs=[],cc=[],SK=.45,THR=.8;
+function evalHyp(cells,l,mode,name,trust){
+ var fs=[],cc=[],SK=.45,tr=!!trust&&mode!=="free",THR=tr?9:.8;
  cells.forEach(function(c){if(!c)return;var f=candF(c.cv,c.hf,c.blf);if(f){fs.push(f);cc.push(c)}});
  var N=cc.length,Mn=l.length;
  if(!N)return null;
@@ -883,7 +1075,7 @@ function evalHyp(cells,l,mode,name){
  var tot=0;
  pairs.forEach(function(p){tot+=C[p[0]][p[1]]});
  tot+=SK*(N-pairs.length)+SK*(Mn-pairs.length);
- return{name:name,cells:cc,C:C,pairs:pairs,N:N,score:tot/Math.max(Mn,N)};
+ return{name:name,cells:cc,C:C,pairs:pairs,N:N,trust:tr,score:tot/Math.max(Mn,N)};
 }
 function drawRecog(img,best,lab,low){
  var cv=$("det"),k=Math.min(1,900/img.width);
@@ -907,6 +1099,12 @@ function recogMain(l){
   return h.N>=.9*l.length&&h.N<=1.1*l.length&&h.score<.3;
  }
  function autoCells(res){return res.seq.map(function(g,i){return{cv:res.crops[i],hf:res.hf,blf:res.blf,box:[g.x0,g.y0,g.w,g.h]}})}
+ var fr=null;
+ try{fr=facesSplit(img,l.length)}catch(e){fr=null}
+ if(fr&&fr.count){
+  var hf=evalHyp(autoCells(fr),l,mode,"bidang huruf (garis tepi)",fr.count===l.length);
+  if(consider(hf)||fr.count===l.length)done=true;
+ }
  var variants=punct?[{mg:false,ovl:false},{mg:true,ovl:false},{mg:false,ovl:true}]:[{mg:true,ovl:false},{mg:true,ovl:true}];
  for(var vi=0;vi<variants.length&&!done;vi++){
   var v=variants[vi],res=autoSplit(img,v);
@@ -940,7 +1138,7 @@ function recogMain(l){
   var c=best.cells[p[0]],ch=l[p[1]],row=best.C[p[0]],cost=row[p[1]],second=9;
   row.forEach(function(x,j){if(j!==p[1]&&x<second)second=x});
   setSlot(ch,c.cv,"auto",c.hf,c.blf);
-  var low=cost>.42||(second-cost<.015&&cost>.25);
+  var low=best.trust?false:(cost>.42||(second-cost<.015&&cost>.25));
   slots[ch].low=low;lab[p[0]]=ch;lowF[p[0]]=low;used[ch]=1;
   if(low)lowL.push(ch);
  });
@@ -948,6 +1146,7 @@ function recogMain(l){
  drawRecog(img,best,lab,lowF);
  var m=ok+" dari "+l.length+" karakter dikenali dan ditempatkan ("+best.N+" huruf terdeteksi, cara terbaik: "+best.name+").";
  if(Math.abs(ang)>=1)m+=" Gambar diluruskan "+Math.abs(ang).toFixed(1)+" derajat.";
+ if(best.trust)m+=" Urutan huruf mengikuti posisi di gambar (kiri ke kanan, atas ke bawah). Bila urutan di gambar berbeda dari langkah 1, ganti penempatan ke Bebas.";
  if(lowL.length)m+=" Kurang yakin: "+lowL.slice(0,20).join(" ")+(lowL.length>20?" ...":"")+". Kotaknya bertanda merah, periksa dan ganti bila salah.";
  if(miss.length)m+=" Belum ditemukan: "+miss.slice(0,20).join(" ")+(miss.length>20?" ...":"")+".";
  if(best.N>1.4*l.length||best.N<.6*l.length)m+=" Jumlah huruf terdeteksi jauh berbeda dari daftar karakter. Coba isi susunan huruf per baris, atau pakai mode Terpandu.";
@@ -1218,6 +1417,18 @@ function rebuild(manual){
     var s=slots[ch];if(!s)return;
     var g=makeGlyph(s,off,sc,sb,bl,fill);g.u=ch.codePointAt(0);items.push(g);
    });
+   if($("lcc").checked){
+    var have={};items.forEach(function(g){have[g.u]=1});
+    items.slice().forEach(function(g){
+     var c=String.fromCodePoint(g.u),alts=[c.toLowerCase(),c.toUpperCase()];
+     alts.forEach(function(a){
+      if(Array.from(a).length!==1||a===c)return;
+      var u=a.codePointAt(0);
+      if(u>65535||have[u]||slots[a])return;
+      have[u]=1;items.push({adv:g.adv,contours:g.contours,u:u});
+     });
+    });
+   }
    if(!items.length){$("build").disabled=true;$("msg").textContent="Belum ada karakter terisi.";return}
    if(!items.some(function(g){return g.u===32}))items.push({u:32,adv:300,contours:[]});
    items.sort(function(a,b){return a.u-b.u});
